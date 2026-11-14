@@ -131,6 +131,10 @@ src/main/java
 
 Flujo: Usuario → UI → Service → DAO → MySQL. Las excepciones viajan del Service a la UI, que las muestra con `JOptionPane` (y además deja el aviso en el HUD), sin cortar la partida.
 
+# Flujo de trabajo
+
+El repositorio se trabajó con una rama por integrante (`jazmin` y `octavio`) y la integración final en `main` mediante merges. La entrega no incluye versiones anteriores ni carpetas duplicadas: el proyecto Maven está directamente en la raíz.
+
 # Capturas
 
 Las pantallas del juego están renderizadas a 3x (1152x720) desde el lienzo de 384x240. El menú de partidas usa el mismo escalado entero y se capturó a 4x (1536x960), el tamaño máximo en 1920x1080.
