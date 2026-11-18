@@ -2,17 +2,16 @@ package ui;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Utilidades de dibujo para la pantalla de juego: fuentes, paneles, barras y texto.
- * Todo se dibuja sin antialias y en coordenadas enteras para que cada píxel quede nítido.
  *
- * Hay dos familias con roles bien separados: Silkscreen (títulos y carteles) y VT323
- * (cuerpo, listas y ayudas). Silkscreen pierde legibilidad en tamaños chicos, sobre todo
- * con minúsculas y acentos; VT323 conserva la forma de cada letra a 9-11 px.
+ * El escenario se sigue dibujando en pixel art sobre el lienzo de 384x240, pero la interfaz
+ * ya no se hornea ahí: se dibuja directamente sobre la ventana, con la misma escala entera
+ * del escenario. Así cada letra se rasteriza a la resolución real de la pantalla (por ejemplo
+ * 9 px de diseño por 4 de escala = 36 px reales) y se lee nitidísima, sin agrandar el texto.
  */
 public final class Pixel {
 
@@ -39,22 +38,11 @@ public final class Pixel {
     public static final Color VERDE_OSCURO = new Color(0x3F6B52);
     public static final Color AZUL = new Color(0x6D8FA8);
 
-    private static final Font DISPLAY = cargar("Silkscreen-Regular.ttf");
-    private static final Font DISPLAY_NEGRITA = cargar("Silkscreen-Bold.ttf");
-    private static final Font TEXTO = cargar("VT323-Regular.ttf");
+    // Una sola familia del sistema para toda la interfaz: formas reales de cada letra y
+    // acentos correctos. El escenario conserva su pixel art, el texto deja de serlo.
+    private static final Font BASE = new Font(Font.SANS_SERIF, Font.PLAIN, 10);
 
     private Pixel() { }
-
-    private static Font cargar(String archivo) {
-        try (InputStream in = Pixel.class.getResourceAsStream("/fonts/" + archivo)) {
-            if (in != null) {
-                return Font.createFont(Font.TRUETYPE_FONT, in);
-            }
-        } catch (Exception ignorada) {
-            // Si el recurso no está, seguimos con la monoespaciada del sistema.
-        }
-        return new Font("Monospaced", Font.PLAIN, 8);
-    }
 
     /** Deja el contexto listo para pixel art: sin suavizado y con interpolación dura. */
     public static void preparar(Graphics2D g) {
@@ -65,14 +53,24 @@ public final class Pixel {
         g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
     }
 
-    /** Fuente de cuerpo: legible incluso a 9 px. */
-    public static Font fuenteTexto(int tam) {
-        return TEXTO.deriveFont((float) tam);
+    /**
+     * Contexto de interfaz: los rectángulos siguen siendo nítidos, pero el texto se suaviza
+     * y se rasteriza a la escala real de la ventana. Es lo que hace legible cada letra.
+     */
+    public static void prepararInterfaz(Graphics2D g) {
+        preparar(g);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
     }
 
-    /** Fuente de títulos y carteles. Solo conviene usarla desde 13 px. */
+    /** Fuente de cuerpo: misma altura aparente que antes, pero con letras reales. */
+    public static Font fuenteTexto(int tam) {
+        return BASE.deriveFont((float) tam);
+    }
+
+    /** Fuente de títulos y carteles, con negrita opcional. */
     public static Font fuenteDisplay(int tam, boolean negrita) {
-        return (negrita ? DISPLAY_NEGRITA : DISPLAY).deriveFont((float) tam);
+        return BASE.deriveFont(negrita ? Font.BOLD : Font.PLAIN, (float) tam);
     }
 
     /** Elige automáticamente la familia según el tamaño. */
@@ -411,17 +409,13 @@ public final class Pixel {
     }
 
     /**
-     * Dibuja el lienzo en pantalla completa: un fondo de textura oscura ocupa todo el
-     * monitor y el lienzo nítido queda centrado con un marco. Así no aparecen franjas
-     * negras muertas ni copias gigantes de la interfaz en 1920x1080.
+     * Dibuja el fondo de textura oscura, la viñeta y el marco del área de juego. Devuelve el
+     * encuadre para que la interfaz se dibuje exactamente encima del escenario.
      */
-    public static void pintarPantalla(Graphics2D g, BufferedImage lienzo, int ventanaAncho, int ventanaAlto) {
+    public static Encuadre pintarMarco(Graphics2D g, int ventanaAncho, int ventanaAlto,
+                                       int lienzoAncho, int lienzoAlto) {
         g.setColor(NEGRO);
         g.fillRect(0, 0, ventanaAncho, ventanaAlto);
-        if (lienzo == null || ventanaAncho <= 0 || ventanaAlto <= 0) {
-            return;
-        }
-        // Textura de tablero muy tenue: da profundidad sin repetir el contenido.
         g.setPaint(texturaFondo());
         g.fillRect(0, 0, ventanaAncho, ventanaAlto);
         g.setPaint(null);
@@ -435,7 +429,7 @@ public final class Pixel {
             g.fillRect(ventanaAncho - 8 - i * 8, 0, 8, ventanaAlto);
         }
 
-        Encuadre encuadre = calcularLienzo(ventanaAncho, ventanaAlto, lienzo.getWidth(), lienzo.getHeight());
+        Encuadre encuadre = calcularLienzo(ventanaAncho, ventanaAlto, lienzoAncho, lienzoAlto);
         int x = encuadre.x();
         int y = encuadre.y();
         int w = encuadre.ancho();
@@ -448,7 +442,22 @@ public final class Pixel {
         g.drawRect(x - 4, y - 4, w + 7, h + 7);
         g.setColor(new Color(255, 255, 255, 18));
         g.drawLine(x - 3, y - 3, x + w + 2, y - 3);
-        g.drawImage(lienzo, x, y, w, h, null);
+        return encuadre;
+    }
+
+    /**
+     * Dibuja el lienzo del escenario centrado y con escala entera. La interfaz se pinta
+     * después, encima, con {@link #prepararInterfaz(Graphics2D)} para que el texto sea nítido.
+     */
+    public static void pintarPantalla(Graphics2D g, BufferedImage lienzo, int ventanaAncho, int ventanaAlto) {
+        if (lienzo == null || ventanaAncho <= 0 || ventanaAlto <= 0) {
+            g.setColor(NEGRO);
+            g.fillRect(0, 0, ventanaAncho, ventanaAlto);
+            return;
+        }
+        Encuadre encuadre = pintarMarco(g, ventanaAncho, ventanaAlto,
+                lienzo.getWidth(), lienzo.getHeight());
+        g.drawImage(lienzo, encuadre.x(), encuadre.y(), encuadre.ancho(), encuadre.alto(), null);
     }
 
     private static TexturePaint texturaFondo;

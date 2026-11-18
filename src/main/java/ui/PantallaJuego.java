@@ -73,6 +73,7 @@ public class PantallaJuego extends JPanel implements ActionListener {
     private String toast = "";
     private int toastTicks;
     private int golpeCorduraTicks;
+    private int golpesVistos;
     private Tipo toastTipo = Tipo.SISTEMA;
     private String causaDerrota;
     private boolean confirmarAvance;
@@ -142,6 +143,10 @@ public class PantallaJuego extends JPanel implements ActionListener {
 
         if (estado == Estado.JUEGO) {
             escena.actualizar(teclas, false);
+            if (escena.getGolpes() > golpesVistos) {
+                golpesVistos = escena.getGolpes();
+                golpeCorduraTicks = 32;
+            }
             if (!juego.isPerdida() && ahora - ultimoLatidoPresion >= JuegoService.INTERVALO_PRESION_MS) {
                 ultimoLatidoPresion = ahora;
                 int dano = juego.latidoPresion();
@@ -181,21 +186,34 @@ public class PantallaJuego extends JPanel implements ActionListener {
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
-        dibujarLienzo();
+        dibujarEscena();
         Graphics2D g2 = (Graphics2D) g.create();
         Pixel.preparar(g2);
         Pixel.pintarPantalla(g2, lienzo, getWidth(), getHeight());
+
+        // La interfaz va sobre la ventana, con la misma escala que el escenario. Así el
+        // texto se rasteriza a la resolución real y deja de verse como pixel art.
+        Pixel.Encuadre encuadre = Pixel.calcularLienzo(getWidth(), getHeight(), ANCHO, ALTO);
+        Graphics2D ui = (Graphics2D) g2.create();
+        Pixel.prepararInterfaz(ui);
+        ui.clipRect(encuadre.x(), encuadre.y(), encuadre.ancho(), encuadre.alto());
+        ui.translate(encuadre.x(), encuadre.y());
+        ui.scale(encuadre.escala(), encuadre.escala());
+        dibujarInterfaz(ui);
+        ui.dispose();
         g2.dispose();
     }
 
-    private void dibujarLienzo() {
+    private void dibujarEscena() {
         Graphics2D g = lienzo.createGraphics();
         Pixel.preparar(g);
         g.setColor(Pixel.NEGRO);
         g.fillRect(0, 0, ANCHO, ALTO);
-
         escena.pintar(g);
+        g.dispose();
+    }
 
+    private void dibujarInterfaz(Graphics2D g) {
         switch (estado) {
             case INTRO -> dibujarIntro(g);
             case JUEGO -> dibujarHud(g);
@@ -221,7 +239,6 @@ public class PantallaJuego extends JPanel implements ActionListener {
             }
             default -> dibujarHud(g);
         }
-        g.dispose();
     }
 
     // ------------------------------------------------------------------ intro
@@ -317,17 +334,24 @@ public class PantallaJuego extends JPanel implements ActionListener {
         Pixel.textoCentrado(g, "TODO LISTO", ANCHO / 2, 74, Pixel.T_TITULO, Pixel.MOSTAZA, true);
         Pixel.textoCentrado(g, "El buffet abre en un rato.", ANCHO / 2, 88, Pixel.T_CHICO, Pixel.GRIS);
 
-        Pixel.panelTenue(g, 48, 104, 288, 84, 190, Pixel.BORDE);
-        Pixel.texto(g, "WASD / flechas   moverte", 60, 122, Pixel.T_CUERPO, Pixel.CREMA);
-        Pixel.texto(g, "E / ENTER        interactuar", 60, 136, Pixel.T_CUERPO, Pixel.CREMA);
-        Pixel.texto(g, "I                usar la mochila", 60, 150, Pixel.T_CUERPO, Pixel.CREMA);
-        Pixel.texto(g, "Q                soltar lo que tenés", 60, 164, Pixel.T_CUERPO, Pixel.CREMA);
-        Pixel.texto(g, "TAB              cuaderno de turno", 60, 178, Pixel.T_CUERPO, Pixel.CREMA);
+        Pixel.panelTenue(g, 44, 100, 296, 98, 196, Pixel.BORDE);
+        Pixel.texto(g, "WASD / flechas", 58, 118, Pixel.T_CUERPO, Pixel.MOSTAZA);
+        Pixel.texto(g, "moverte por el buffet", 160, 118, Pixel.T_CUERPO, Pixel.CREMA);
+        Pixel.texto(g, "SHIFT", 58, 132, Pixel.T_CUERPO, Pixel.MOSTAZA);
+        Pixel.texto(g, "correr", 160, 132, Pixel.T_CUERPO, Pixel.CREMA);
+        Pixel.texto(g, "E / ENTER", 58, 146, Pixel.T_CUERPO, Pixel.MOSTAZA);
+        Pixel.texto(g, "interactuar", 160, 146, Pixel.T_CUERPO, Pixel.CREMA);
+        Pixel.texto(g, "I", 58, 160, Pixel.T_CUERPO, Pixel.MOSTAZA);
+        Pixel.texto(g, "usar la mochila", 160, 160, Pixel.T_CUERPO, Pixel.CREMA);
+        Pixel.texto(g, "Q", 58, 174, Pixel.T_CUERPO, Pixel.MOSTAZA);
+        Pixel.texto(g, "soltar lo que tenés", 160, 174, Pixel.T_CUERPO, Pixel.CREMA);
+        Pixel.texto(g, "TAB", 58, 188, Pixel.T_CUERPO, Pixel.MOSTAZA);
+        Pixel.texto(g, "cuaderno de turno", 160, 188, Pixel.T_CUERPO, Pixel.CREMA);
 
         Pixel.textoCentrado(g, "Cruzá las puertas de los bordes para cambiar de sala.",
-                ANCHO / 2, 204, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
+                ANCHO / 2, 210, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
         if ((System.currentTimeMillis() / 420) % 2 == 0) {
-            Pixel.textoCentrado(g, "ENTER para entrar", ANCHO / 2, 226, Pixel.T_CUERPO,
+            Pixel.textoCentrado(g, "ENTER para entrar", ANCHO / 2, 228, Pixel.T_CUERPO,
                     Pixel.MOSTAZA_CLARA, true);
         }
     }
@@ -364,6 +388,7 @@ public class PantallaJuego extends JPanel implements ActionListener {
         toast = "";
         toastTicks = 0;
         golpeCorduraTicks = 0;
+        golpesVistos = escena.getGolpes();
         requestFocusInWindow();
     }
 
@@ -389,13 +414,14 @@ public class PantallaJuego extends JPanel implements ActionListener {
         String dia = "DÍA " + j.getDiaActual();
         Pixel.texto(g, dia, 9, 13, Pixel.T_CHICO, Pixel.MOSTAZA);
         String sala = " · " + juego.getSala().getNombre().toUpperCase();
-        int espacioSala = Math.max(0, 70 - Pixel.ancho(g, dia, Pixel.T_CHICO));
+        int xDia = 9 + Pixel.ancho(g, dia, Pixel.T_CHICO);
+        int espacioSala = Math.max(0, 104 - xDia);
         Pixel.texto(g, Pixel.recortar(g, sala, espacioSala, Pixel.T_CHICO, false),
-                9 + Pixel.ancho(g, dia, Pixel.T_CHICO), 13, Pixel.T_CHICO, Pixel.GRIS);
+                xDia, 13, Pixel.T_CHICO, Pixel.GRIS);
 
         String pedidos = juego.clientesAtendidos() + "/" + juego.totalClientes();
         String tareas = juego.tareasHechas() + "/" + juego.totalTareas();
-        int px = 80;
+        int px = 120;
         Pixel.texto(g, "PEDIDOS", px, 13, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
         px += Pixel.ancho(g, "PEDIDOS ", Pixel.T_CHICO);
         Pixel.texto(g, pedidos, px, 13, Pixel.T_CHICO, Pixel.CREMA);
@@ -406,26 +432,26 @@ public class PantallaJuego extends JPanel implements ActionListener {
         px += Pixel.ancho(g, "TAREAS ", Pixel.T_CHICO);
         Pixel.texto(g, tareas, px, 13, Pixel.T_CHICO, Pixel.CREMA);
 
-        String presion = "PRESIÓN " + juego.getPresionEtiqueta();
         String valorCordura = String.valueOf(cordura);
-        int anchoGrupo = Pixel.ancho(g, "CORDURA ", Pixel.T_CHICO)
-                + Pixel.ancho(g, valorCordura, Pixel.T_CHICO) + 3 + 40 + 3
-                + Pixel.ancho(g, presion, Pixel.T_CHICO);
-        int xCordura = 376 - anchoGrupo;
+        int anchoCordura = Pixel.ancho(g, "CORDURA ", Pixel.T_CHICO)
+                + Pixel.ancho(g, valorCordura, Pixel.T_CHICO) + 4 + 36;
+        int xCordura = 376 - anchoCordura;
         Pixel.texto(g, "CORDURA", xCordura, 13, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
         int xValor = xCordura + Pixel.ancho(g, "CORDURA ", Pixel.T_CHICO);
         Color colorNumero = golpeCorduraTicks > 0 ? Pixel.ROJO_CLARO : colorCordura;
         Pixel.texto(g, valorCordura, xValor, 13, Pixel.T_CHICO, colorNumero);
-        int xBarra = xValor + Pixel.ancho(g, valorCordura, Pixel.T_CHICO) + 3;
-        Pixel.barra(g, xBarra, 8, 40, 5, cordura, 100, colorCordura, new Color(0x1B2621), Pixel.BORDE);
-        Pixel.texto(g, presion, xBarra + 43, 13, Pixel.T_CHICO, colorPresion);
+        int xBarra = xValor + Pixel.ancho(g, valorCordura, Pixel.T_CHICO) + 4;
+        Pixel.barra(g, xBarra, 8, 36, 5, cordura, 100, colorCordura, new Color(0x1B2621), Pixel.BORDE);
 
-        // segunda línea: objetivo, sin panel extra
+        // segunda línea: objetivo a la izquierda, presión a la derecha
         g.setColor(new Color(255, 255, 255, 12));
         g.drawLine(8, 16, 376, 16);
         Pixel.texto(g, "OBJETIVO", 9, 24, Pixel.T_CHICO, Pixel.MOSTAZA);
-        Pixel.texto(g, Pixel.recortar(g, juego.getPista(), 327, Pixel.T_CHICO, false),
-                49, 24, Pixel.T_CHICO, Pixel.CREMA);
+        Pixel.texto(g, Pixel.recortar(g, juego.getPista(), 230, Pixel.T_CHICO, false),
+                58, 24, Pixel.T_CHICO, Pixel.CREMA);
+        String presion = "PRESIÓN " + juego.getPresionEtiqueta();
+        Pixel.texto(g, presion, 376 - Pixel.ancho(g, presion, Pixel.T_CHICO), 24,
+                Pixel.T_CHICO, colorPresion);
 
         // objeto en la mano: chip compacto de una línea
         Objeto enMano = juego.getEnMano();
@@ -461,7 +487,7 @@ public class PantallaJuego extends JPanel implements ActionListener {
             }
             int ancho = Math.min(220, Pixel.ancho(g, texto, Pixel.T_CHICO, false) + 17);
             int x = Math.max(4, Math.min(ANCHO - ancho - 4, (int) Math.round(escena.getX()) - ancho / 2));
-            int y = Math.max(36, Math.min(158, (int) Math.round(escena.getY()) - 28));
+            int y = Math.max(36, Math.min(186, (int) Math.round(escena.getY()) - 28));
             Pixel.panelTenue(g, x, y, ancho, 12, 214, listo ? Pixel.MOSTAZA : Pixel.ROJO);
             g.setColor(new Color(0x1B2621));
             g.fillRect(x + 2, y + 2, 8, 8);
@@ -565,7 +591,7 @@ public class PantallaJuego extends JPanel implements ActionListener {
                 if (t.requiereHerramienta()) {
                     detalle += " · " + t.getHerramienta().getNombre();
                 }
-                Pixel.texto(g, Pixel.recortar(g, detalle, 154, Pixel.T_CHICO, false),
+                Pixel.texto(g, Pixel.recortar(g, detalle, 162, Pixel.T_CHICO, false),
                         30, ty + 10, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
                 ty += 20;
             }
@@ -605,7 +631,7 @@ public class PantallaJuego extends JPanel implements ActionListener {
                 Pixel.texto(g, nombre, x + 15, fy + 11, Pixel.T_CHICO,
                         elegido ? Pixel.CREMA : Pixel.GRIS);
                 String etiqueta = o instanceof Herramienta ? "EQUIPAR" : (o.isUtilizable() ? "USAR" : "—");
-                Pixel.textoDerecha(g, etiqueta, x + 154, fy + 11, Pixel.T_CHICO, Pixel.MOSTAZA);
+                Pixel.textoDerecha(g, etiqueta, x + 149, fy + 11, Pixel.T_CHICO, Pixel.MOSTAZA);
             }
             if (objetos.size() > filas) {
                 Pixel.texto(g, "+" + (objetos.size() - filas) + " más", x, 213, Pixel.T_CHICO,
@@ -647,35 +673,35 @@ public class PantallaJuego extends JPanel implements ActionListener {
 
     private void dibujarFinDeDia(Graphics2D g) {
         oscurecer(g);
-        Pixel.panel(g, 20, 10, 344, 220, new Color(0x0D1411), Pixel.BORDE_CLARO);
-        Pixel.textoCentradoDisplay(g, "SE TERMINÓ LA JORNADA", ANCHO / 2, 36, Pixel.T_SUBTITULO,
+        Pixel.panel(g, 20, 6, 344, 228, new Color(0x0D1411), Pixel.BORDE_CLARO);
+        Pixel.textoCentradoDisplay(g, "SE TERMINÓ LA JORNADA", ANCHO / 2, 32, Pixel.T_SUBTITULO,
                 Pixel.MOSTAZA, true);
         Pixel.textoCentrado(g, "DÍA " + juego.getJugador().getDiaActual() + "  ·  "
-                + juego.getJugador().getNombre(), ANCHO / 2, 49, Pixel.T_CHICO, Pixel.GRIS);
+                + juego.getJugador().getNombre(), ANCHO / 2, 45, Pixel.T_CHICO, Pixel.GRIS);
 
         int[] valores = {juego.clientesAtendidos(), juego.tareasHechas(), juego.getJugador().getDiaActual()};
         String[] titulos = {"CLIENTES", "TAREAS", "DÍA"};
         String[] maximos = {"/" + juego.totalClientes(), "/" + juego.totalTareas(), ""};
         for (int i = 0; i < 3; i++) {
             int x = 40 + i * 104;
-            Pixel.panelTenue(g, x, 56, 96, 32, 120, Pixel.BORDE);
-            Pixel.textoCentradoDisplay(g, valores[i] + maximos[i], x + 48, 75, Pixel.T_SUBTITULO,
+            Pixel.panelTenue(g, x, 52, 96, 32, 120, Pixel.BORDE);
+            Pixel.textoCentradoDisplay(g, valores[i] + maximos[i], x + 48, 71, Pixel.T_SUBTITULO,
                     i == 2 ? Pixel.MOSTAZA : Pixel.CREMA, true);
-            Pixel.textoCentrado(g, titulos[i], x + 48, 86, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
+            Pixel.textoCentrado(g, titulos[i], x + 48, 82, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
         }
 
         int cordura = juego.getJugador().getCordura();
         Color color = cordura < JuegoService.CORDURA_MINIMA_DIA ? Pixel.ROJO
                 : cordura < 55 ? Pixel.MOSTAZA : Pixel.VERDE;
-        Pixel.texto(g, "CORDURA AL CERRAR", 40, 103, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
-        Pixel.barra(g, 76, 108, 236, 8, cordura, 100, color, new Color(0x1B2621), Pixel.BORDE);
-        Pixel.textoDisplay(g, String.valueOf(cordura), 40, 137, Pixel.T_TITULO, color, true);
+        Pixel.texto(g, "CORDURA AL CERRAR", 40, 99, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
+        Pixel.barra(g, 76, 104, 236, 8, cordura, 100, color, new Color(0x1B2621), Pixel.BORDE);
+        Pixel.textoDisplay(g, String.valueOf(cordura), 40, 133, Pixel.T_TITULO, color, true);
         if (cordura < JuegoService.CORDURA_MINIMA_DIA) {
             Pixel.texto(g, "Debajo del mínimo (" + JuegoService.CORDURA_MINIMA_DIA
-                    + "): si pasás, perdés.", 76, 137, Pixel.T_CHICO, Pixel.ROJO_CLARO);
+                    + "): si pasás, perdés.", 76, 133, Pixel.T_CHICO, Pixel.ROJO_CLARO);
         } else {
             Pixel.texto(g, "Al dormir recuperás " + JuegoService.RECUPERACION_DIARIA
-                    + " de cordura.", 76, 137, Pixel.T_CHICO, Pixel.GRIS);
+                    + " de cordura.", 76, 133, Pixel.T_CHICO, Pixel.GRIS);
         }
 
         List<Objeto> consumibles = new ArrayList<>();
@@ -685,14 +711,14 @@ public class PantallaJuego extends JPanel implements ActionListener {
             }
         }
 
-        Pixel.texto(g, "CONSUMIBLES", 40, 152, Pixel.T_CUERPO, Pixel.MOSTAZA);
+        Pixel.texto(g, "CONSUMIBLES", 40, 148, Pixel.T_CUERPO, Pixel.MOSTAZA);
         if (consumibles.isEmpty()) {
-            Pixel.texto(g, "No te queda nada. Vas a cerrar así.", 40, 169, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
+            Pixel.texto(g, "No te queda nada. Vas a cerrar así.", 40, 167, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
         } else {
             for (int i = 0; i < Math.min(4, consumibles.size()); i++) {
                 Objeto o = consumibles.get(i);
                 boolean elegido = i == seleccion;
-                int fy = 162 + i * 15;
+                int fy = 158 + i * 15;
                 if (elegido) {
                     Pixel.panelTenue(g, 36, fy - 1, 156, 14, 175, Pixel.MOSTAZA);
                 }
@@ -706,7 +732,7 @@ public class PantallaJuego extends JPanel implements ActionListener {
             }
         }
 
-        Pixel.texto(g, "DECISIÓN", 204, 152, Pixel.T_CUERPO, Pixel.MOSTAZA);
+        Pixel.texto(g, "DECISIÓN", 204, 148, Pixel.T_CUERPO, Pixel.MOSTAZA);
         int base = consumibles.size();
         for (int i = 0; i < OPCIONES_FIN.length; i++) {
             String texto = OPCIONES_FIN[i];
@@ -720,9 +746,9 @@ public class PantallaJuego extends JPanel implements ActionListener {
                     peligro = true;
                 }
             }
-            Pixel.boton(g, 204, 158 + i * 21, 146, 17, texto, seleccion == base + i, peligro, Pixel.MOSTAZA);
+            Pixel.boton(g, 204, 154 + i * 21, 146, 17, texto, seleccion == base + i, peligro, Pixel.MOSTAZA);
         }
-        Pixel.texto(g, "ENTER confirmar  ·  ESC volver", 204, 227, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
+        Pixel.texto(g, "ENTER confirmar  ·  ESC volver", 204, 225, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
     }
 
     private void dibujarDerrota(Graphics2D g) {

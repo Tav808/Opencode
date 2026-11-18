@@ -13,15 +13,15 @@ import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * Menú principal dibujado a mano sobre el mismo lienzo de 384x240 que el juego.
- * La idea es que la primera pantalla también sea pixel art: lista de partidas,
- * ficha del jugador, formulario de alta/edición y confirmación de borrado.
+ * Menú principal dibujado a mano sobre el mismo encuadre de 384x240 que el juego:
+ * lista de partidas, ficha del jugador, formulario de alta/edición y confirmación
+ * de borrado. Los paneles se alinean a la grilla del pixel art, pero el texto se
+ * dibuja a la resolución real de la ventana para que se lea nítido.
  */
 public class PantallaPartidas extends JPanel {
 
@@ -50,7 +50,6 @@ public class PantallaPartidas extends JPanel {
 
     private final PartidaService service;
     private final Consumer<Jugador> alJugar;
-    private final BufferedImage lienzo = new BufferedImage(ANCHO, ALTO, BufferedImage.TYPE_INT_ARGB);
     private final Timer timer;
     private final DefaultTableModel modeloPartidas;
     private final JTable tablaPartidas;
@@ -270,17 +269,23 @@ public class PantallaPartidas extends JPanel {
     @Override
     protected void paintComponent(Graphics g0) {
         super.paintComponent(g0);
-        dibujarLienzo();
-
         Graphics2D g = (Graphics2D) g0.create();
         Pixel.preparar(g);
-        Pixel.pintarPantalla(g, lienzo, getWidth(), getHeight());
+        Pixel.Encuadre encuadre = Pixel.pintarMarco(g, getWidth(), getHeight(), ANCHO, ALTO);
+
+        // El menú se dibuja directo sobre la ventana con la escala del área de juego:
+        // los paneles siguen alineados a la grilla y el texto sale nítido y no pixelado.
+        Graphics2D ui = (Graphics2D) g.create();
+        Pixel.prepararInterfaz(ui);
+        ui.clipRect(encuadre.x(), encuadre.y(), encuadre.ancho(), encuadre.alto());
+        ui.translate(encuadre.x(), encuadre.y());
+        ui.scale(encuadre.escala(), encuadre.escala());
+        dibujarMenu(ui);
+        ui.dispose();
         g.dispose();
     }
 
-    private void dibujarLienzo() {
-        Graphics2D g = lienzo.createGraphics();
-        Pixel.preparar(g);
+    private void dibujarMenu(Graphics2D g) {
         dibujarFondo(g);
         dibujarTitulo(g);
         dibujarLista(g);
@@ -294,7 +299,6 @@ public class PantallaPartidas extends JPanel {
         } else if (capa == Capa.BORRAR) {
             dibujarConfirmacion(g);
         }
-        g.dispose();
     }
 
     private void dibujarFondo(Graphics2D g) {

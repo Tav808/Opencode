@@ -35,6 +35,10 @@ public class JuegoService {
     public static final int RECUPERACION_DIARIA = 8;
     /** Cada cuánto la presión del turno desgasta cordura mientras haya trabajo pendiente. */
     public static final long INTERVALO_PRESION_MS = 12_000;
+    /** Con la cordura en este piso o menos, cualquier trabajo pendiente vuelve la presión crítica. */
+    public static final int CORDURA_PRESION_CRITICA = 35;
+    /** Cuando una sombra te alcanza en el apagón. */
+    public static final int DANO_SOMBRA = 10;
 
     private static final int MAX_CLIENTES = 12;
     private static final int MAX_TAREAS = 7;
@@ -43,6 +47,8 @@ public class JuegoService {
     private final Random azar = new Random();
     private final List<Cliente> clientes = new ArrayList<>();
     private final List<Tarea> tareas = new ArrayList<>();
+    /** Tareas del día que todavía no se mostraron: se activan a medida que entregás pedidos. */
+    private final List<Tarea> tareasPendientesDeActivar = new ArrayList<>();
     private final Inventario inventario = new Inventario();
     private final NPC conserje = new NPC(900, "el conserje", "conserje del turno noche",
             "Si la luz se va, no corras: el pasillo cambia de lugar.", true);
@@ -117,11 +123,17 @@ public class JuegoService {
         return pendientes + peso;
     }
 
-    /** 0 = tranquilo, 1 = leve, 2 = tensa, 3 = alta, 4 = crítica. */
+    /**
+     * 0 = tranquilo, 1 = leve, 2 = tensa, 3 = alta, 4 = crítica.
+     * Con poca cordura cualquier trabajo abierto se vuelve crítica: el turno ya no se aguanta.
+     */
     public int nivelPresion() {
         int peso = presionPendiente();
         if (peso <= 0) {
             return 0;
+        }
+        if (jugador.getCordura() <= CORDURA_PRESION_CRITICA) {
+            return 4;
         }
         if (peso <= 3) {
             return 1;
@@ -194,17 +206,35 @@ public class JuegoService {
         return (int) clientes.stream().filter(Cliente::isAtendido).count();
     }
 
+    /** Incluye las tareas del día que todavía esperan su turno para activarse. */
     public int totalTareas() {
-        return tareas.size();
+        return tareas.size() + tareasPendientesDeActivar.size();
     }
 
     public int tareasHechas() {
         return (int) tareas.stream().filter(Tarea::isCompletada).count();
     }
 
+    public int tareasPorActivar() {
+        return tareasPendientesDeActivar.size();
+    }
+
+    /**
+     * Pasa la próxima tarea de la cola a la sala. Se llama una vez por pedido entregado:
+     * el turno se va complicando a medida que avanza, no de golpe al empezar.
+     */
+    public Tarea activarSiguienteTarea() {
+        if (tareasPendientesDeActivar.isEmpty()) {
+            return null;
+        }
+        Tarea siguiente = tareasPendientesDeActivar.remove(0);
+        tareas.add(siguiente);
+        return siguiente;
+    }
+
     /** Ya no queda nada por atender ni por limpiar en la jornada. */
     public boolean turnoTerminado() {
-        return !hayClientePendiente() && !hayTareaPendiente();
+        return !hayClientePendiente() && !hayTareaPendiente() && tareasPendientesDeActivar.isEmpty();
     }
 
     /** La tarea pendiente más peligrosa; la usa el HUD y el conserje. */
@@ -238,7 +268,21 @@ public class JuegoService {
             if (tieneBandejaPara(c)) {
                 return "Llevale la bandeja con " + c.getPedido() + " " + aQuien(c) + ".";
             }
-            return "Prepará " + c.getPedido() + " en la mesada de la cocina.";
+            Lugar estacion = estacionPara(c);
+            Tarea enEstacion = tareaPendienteEn(estacion);
+            if (enEstacion != null) {
+                if (tieneHerramientaPara(estacion)) {
+                    return "La " + nombreEstacion(estacion) + " está trabada: arreglala ahora que tenés "
+                            + herramientaPara(estacion).getNombre() + ".";
+                }
+                if (tieneHerramientaGuardada(estacion)) {
+                    return "Para la " + nombreEstacion(estacion) + " necesitás "
+                            + herramientaPara(estacion).getNombre() + ". Equipala con I.";
+                }
+                return "La " + nombreEstacion(estacion) + " no anda. Buscá "
+                        + herramientaPara(estacion).getNombre() + " en el almacén.";
+            }
+            return "Prepará " + c.getPedido() + " en la " + nombreEstacion(estacion) + ".";
         }
         Tarea t = tareaMasUrgente();
         if (t != null) {
@@ -285,16 +329,78 @@ public class JuegoService {
         if (!c.isPedidoTomado()) {
             throw new InteraccionInvalidaException("Todavía no le tomaste el pedido " + aQuien(c) + ".");
         }
-        if (enMano != null) {
-            if (esBandejaPara(enMano, c)) {
-                return "Ya tenés la bandeja con " + c.getPedido() + ". Llevala al mostrador.";
-            }
+
+        // Cada pedido sale de una estación concreta de la cocina. Si está rota o sucia,
+        // primero hay que arreglarla con su herramienta; recién después se arma la bandeja.
+        Lugar estacion = estacionPara(c);
+        if (esBandejaPara(enMano, c)) {
+            return "Ya tenés la bandeja con " + c.getPedido() + ". Llevala al mostrador.";
+        }
+        if (enMano != null && !(enMano instanceof Herramienta herramienta && herramienta.sirvePara(estacion))) {
             throw new InteraccionInvalidaException("Tenés las manos ocupadas con " + enMano.getNombre()
                     + ". Soltá eso con Q antes de preparar.");
         }
+        activarTareaDeEstacion(estacion);
+        Tarea pendiente = tareaPendienteEn(estacion);
+        if (pendiente != null) {
+            // La herramienta se queda en la mano: todavía hay que usarla en la estación.
+            throw new InteraccionInvalidaException("No podés cocinar así: " + pendiente.getTitulo()
+                    + ". Arreglá la " + nombreEstacion(estacion) + " con "
+                    + herramientaPara(estacion).getNombre() + ".");
+        }
+        if (enMano != null) {
+            // La herramienta de la estación ya cumplió: la guardo y armo la bandeja.
+            inventario.agregar(enMano);
+            enMano = null;
+        }
         drenaje();
         enMano = new Objeto(1000 + c.getId(), "una bandeja con " + c.getPedido(), "PEDIDO", false, 0, null);
-        return "Preparaste una bandeja con " + c.getPedido() + ". No la dejes enfriar.";
+        return "Preparaste una bandeja con " + c.getPedido() + " en la " + nombreEstacion(estacion)
+                + ". No la dejes enfriar.";
+    }
+
+    /**
+     * La estación que necesita cada pedido. Las bebidas y lo frío salen de la heladera,
+     * el café y las infusiones de la cafetera, y todo lo que se cocina de la plancha.
+     */
+    public static Lugar estacionPara(Cliente cliente) {
+        String pedido = cliente.getPedido().toLowerCase();
+        if (pedido.contains("café") || pedido.contains("cafe")
+                || pedido.contains("té") || pedido.contains("chocolate")) {
+            return Lugar.CAFETERA;
+        }
+        if (pedido.contains("agua") || pedido.contains("gaseosa") || pedido.contains("leche")
+                || pedido.contains("alfajor") || pedido.contains("flan")
+                || pedido.contains("torta") || pedido.contains("pan dulce")) {
+            return Lugar.HELADERA;
+        }
+        return Lugar.PLANCHA;
+    }
+
+    /** Nombre en minúsculas de la estación, para armar los mensajes. */
+    public static String nombreEstacion(Lugar estacion) {
+        return switch (estacion) {
+            case PLANCHA -> "plancha";
+            case CAFETERA -> "cafetera";
+            case HELADERA -> "heladera";
+            default -> estacion.getEtiqueta().toLowerCase();
+        };
+    }
+
+    /**
+     * Si la tarea de esa estación todavía estaba en la cola, la adelanta: el pedido la
+     * necesita ya y no tiene sentido dejar al jugador trabado esperando otra entrega.
+     */
+    private void activarTareaDeEstacion(Lugar estacion) {
+        if (tareaPendienteEn(estacion) != null) {
+            return;
+        }
+        for (int i = 0; i < tareasPendientesDeActivar.size(); i++) {
+            if (tareasPendientesDeActivar.get(i).getLugar() == estacion) {
+                tareas.add(tareasPendientesDeActivar.remove(i));
+                return;
+            }
+        }
     }
 
     /** Tercer paso: entregar la bandeja correcta al cliente del mostrador. */
@@ -317,7 +423,13 @@ public class JuegoService {
         c.marcarAtendido();
         enMano = null;
         sumarCordura(6);
-        return "Le entregaste " + c.getPedido() + " " + aQuien(c) + " y se fue conforme. +6 de cordura.";
+        String mensaje = "Le entregaste " + c.getPedido() + " " + aQuien(c) + " y se fue conforme. +6 de cordura.";
+        Tarea nueva = activarSiguienteTarea();
+        if (nueva != null) {
+            mensaje += " Algo más para atender: " + nueva.getTitulo() + " en "
+                    + nueva.getLugar().getEtiqueta() + ".";
+        }
+        return mensaje;
     }
 
     public boolean tieneBandejaPara(Cliente c) {
@@ -570,7 +682,16 @@ public class JuegoService {
         return new ResultadoDia(true, false, "Día " + jugador.getDiaActual(),
                 "Dormiste poco, pero sobreviviste. Recuperaste " + RECUPERACION_DIARIA
                         + " de cordura. Hoy hay " + clientes.size() + " clientes y "
-                        + tareas.size() + " tareas.");
+                        + totalTareas() + " tareas.");
+    }
+
+    /**
+     * Una sombra del apagón te alcanza. No hace daño físico: te saca cordura y te deja
+     * el pulso temblando. La interfaz la usa como confirmación del golpe.
+     */
+    public String golpeSombra() {
+        restarCordura(DANO_SOMBRA);
+        return "Una sombra te rozó la nuca. -" + DANO_SOMBRA + " de cordura.";
     }
 
     /** Cada interacción desgasta un poco. Con el tablero roto, el doble. */
@@ -606,32 +727,52 @@ public class JuegoService {
             clientes.add(new Cliente(i + 1, p.nombre(), p.pedido(), p.respuestas()));
         }
 
-        // Las tareas no se borran al dormir: lo que quedó pendiente sigue ahí y presiona.
+        // Las tareas no se borran al dormir: lo que quedó pendiente sigue activo y presiona.
         tareas.removeIf(Tarea::isCompletada);
+        tareasPendientesDeActivar.clear();
         int objetivo = Math.min(MAX_TAREAS, 2 + (dia + 1) / 2);
+
+        List<Tarea> nuevas = new ArrayList<>();
+        // El apagón abre la noche: el tablero es la primera tarea que se activa.
         if (dia == 1 && !hayTareaPendiente(Lugar.TABLERO)) {
-            tareas.add(crearTarea(Lugar.TABLERO, dia, siguienteNumero(dia)));
+            nuevas.add(crearTarea(Lugar.TABLERO, dia, siguienteNumero(dia, nuevas)));
+        }
+        // La cocina siempre arranca con las tres estaciones en problemas: preparar un
+        // pedido obliga a limpiar la estación que le toca antes de armar la bandeja.
+        // La plancha va primero porque es la que más pedidos usa.
+        for (Lugar estacion : List.of(Lugar.PLANCHA, Lugar.CAFETERA, Lugar.HELADERA)) {
+            boolean yaExiste = tareas.stream().anyMatch(t -> t.getLugar() == estacion)
+                    || nuevas.stream().anyMatch(t -> t.getLugar() == estacion);
+            if (!yaExiste) {
+                nuevas.add(crearTarea(estacion, dia, siguienteNumero(dia, nuevas)));
+            }
         }
         List<Lugar> libres = new ArrayList<>();
         for (Lugar lugar : Lugar.values()) {
-            if (tareas.stream().noneMatch(t -> t.getLugar() == lugar)) {
+            boolean ocupado = tareas.stream().anyMatch(t -> t.getLugar() == lugar)
+                    || nuevas.stream().anyMatch(t -> t.getLugar() == lugar);
+            if (!ocupado) {
                 libres.add(lugar);
             }
         }
         Collections.shuffle(libres, azar);
         for (Lugar lugar : libres) {
-            if (tareas.size() >= objetivo) {
+            if (tareas.size() + nuevas.size() >= objetivo) {
                 break;
             }
-            tareas.add(crearTarea(lugar, dia, siguienteNumero(dia)));
+            nuevas.add(crearTarea(lugar, dia, siguienteNumero(dia, nuevas)));
         }
+        // Ninguna tarea nueva arranca activa: cada pedido entregado habilita la siguiente.
+        tareasPendientesDeActivar.addAll(nuevas);
     }
 
-    /** Los ids no se repiten aunque una tarea vieja siga pendiente. */
-    private int siguienteNumero(int dia) {
+    /** Los ids no se repiten aunque una tarea vieja siga pendiente o esperando en la cola. */
+    private int siguienteNumero(int dia, List<Tarea> nuevas) {
         for (int numero = 1; numero < 100; numero++) {
             final int candidato = numero;
-            if (tareas.stream().noneMatch(t -> t.getId() == dia * 100 + candidato)) {
+            boolean usado = tareas.stream().anyMatch(t -> t.getId() == dia * 100 + candidato)
+                    || nuevas.stream().anyMatch(t -> t.getId() == dia * 100 + candidato);
+            if (!usado) {
                 return candidato;
             }
         }

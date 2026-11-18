@@ -30,8 +30,17 @@ public class EscenaBuffet {
     public static final int ALTO = 240;
 
     private static final int HORIZONTE = 84;
-    private static final double VELOCIDAD = 1.15;
+    /** Caminando se llega cómodo a cualquier sala; con Shift se cruza el buffet corriendo. */
+    private static final double VELOCIDAD = 1.7;
+    private static final double VELOCIDAD_CORRER = 2.9;
     private static final double DISTANCIA = 28;
+    /** Los pies pueden llegar hasta el borde inferior del comedor. */
+    private static final int PISO_MAXIMO = ALTO - 3;
+
+    private static final int SOMBRAS_APAGON = 3;
+    private static final double VELOCIDAD_SOMBRA = 0.38;
+    private static final double DISTANCIA_GOLPE = 11;
+    private static final int ESPERA_GOLPE = 90;
 
     private static final Color PARED = new Color(0x22352D);
     private static final Color PARED_CLARA = new Color(0x2C4339);
@@ -116,6 +125,7 @@ public class EscenaBuffet {
     private final JuegoService juego;
     private final Random azar = new Random(13);
     private final List<Particula> particulas = new ArrayList<>();
+    private final List<Sombra> sombras = new ArrayList<>();
 
     private Sala sala;
     private double x;
@@ -123,9 +133,13 @@ public class EscenaBuffet {
     private int mirada = 1;
     private double animacion;
     private boolean caminando;
+    private boolean corriendo;
     private int tick;
     private double fundido = 1;
     private int espera = 30;
+    private int esperaGolpe;
+    private double golpeFlash;
+    private int golpes;
     private Consumer<Sala> alCambiarSala = s -> { };
     private BufferedImage mascaraLuz;
     private int[] pixelesLuz;
@@ -170,12 +184,21 @@ public class EscenaBuffet {
         ubicarEntrada(nueva, null);
         fundido = 1;
         espera = 30;
+        reiniciarSombras();
     }
 
     public void reiniciarPosicion() {
         ubicarEntrada(sala, null);
         fundido = 1;
         espera = 30;
+        reiniciarSombras();
+    }
+
+    /** Las sombras no cruzan puertas con vos: te esperan del otro lado. */
+    private void reiniciarSombras() {
+        sombras.clear();
+        esperaGolpe = 50;
+        golpeFlash = 0;
     }
 
     public void actualizar(Set<Integer> teclas, boolean bloqueado) {
@@ -201,6 +224,7 @@ public class EscenaBuffet {
         }
 
         caminando = dx != 0 || dy != 0;
+        corriendo = caminando && (teclas.contains(java.awt.event.KeyEvent.VK_SHIFT));
         if (caminando) {
             double largo = Math.hypot(dx, dy);
             dx /= largo;
@@ -208,9 +232,10 @@ public class EscenaBuffet {
             if (dx != 0) {
                 mirada = dx > 0 ? 1 : -1;
             }
+            double velocidad = corriendo ? VELOCIDAD_CORRER : VELOCIDAD;
             int yMinimo = pisoMinimo();
-            double nx = Math.max(14, Math.min(ANCHO - 14, x + dx * VELOCIDAD));
-            double ny = Math.max(yMinimo, Math.min(212, y + dy * VELOCIDAD));
+            double nx = Math.max(14, Math.min(ANCHO - 14, x + dx * velocidad));
+            double ny = Math.max(yMinimo, Math.min(PISO_MAXIMO, y + dy * velocidad));
             // Resolvemos cada eje por separado para poder deslizarse contra los muebles.
             if (!bloquea(nx, y)) {
                 x = nx;
@@ -218,17 +243,30 @@ public class EscenaBuffet {
             if (!bloquea(x, ny)) {
                 y = ny;
             }
-            animacion += 0.18;
+            animacion += corriendo ? 0.30 : 0.18;
         }
 
         int yMinimo = pisoMinimo();
         x = Math.max(14, Math.min(ANCHO - 14, x));
-        y = Math.max(yMinimo, Math.min(212, y));
+        y = Math.max(yMinimo, Math.min(PISO_MAXIMO, y));
 
         if (!bloqueado && espera <= 0 && fundido < 0.4) {
             revisarPuertas();
         }
         actualizarParticulas();
+        actualizarSombras(bloqueado);
+        if (golpeFlash > 0) {
+            golpeFlash = Math.max(0, golpeFlash - 0.055);
+        }
+    }
+
+    public boolean isCorriendo() {
+        return corriendo;
+    }
+
+    /** Cantidad acumulada de golpes de sombra, para que el HUD pueda destellar. */
+    public int getGolpes() {
+        return golpes;
     }
 
     /** Los pies solo pisan el piso de cada sala, nunca la pared. */
@@ -239,6 +277,83 @@ public class EscenaBuffet {
             case ALMACEN -> 100;
             default -> 94;
         };
+    }
+
+    // ------------------------------------------------------------------ sombras del apagón
+
+    /** El apagón dura lo que tarde el tablero: mientras tanto, las sombras caminan. */
+    private boolean apagon() {
+        return juego.hayTareaPendiente(Lugar.TABLERO);
+    }
+
+    private void actualizarSombras(boolean bloqueado) {
+        if (!apagon()) {
+            if (!sombras.isEmpty()) {
+                sombras.clear();
+            }
+            esperaGolpe = Math.max(0, esperaGolpe - 1);
+            return;
+        }
+        // Con un menú abierto el turno no corre: las sombras esperan.
+        if (bloqueado) {
+            return;
+        }
+        if (sombras.isEmpty()) {
+            sembrarSombras();
+        }
+        if (esperaGolpe > 0) {
+            esperaGolpe--;
+        }
+
+        for (Sombra s : sombras) {
+            double dx = x - s.x;
+            double dy = (y - 6) - s.y;
+            double distancia = Math.hypot(dx, dy);
+            if (distancia > 0.001) {
+                s.x += dx / distancia * VELOCIDAD_SOMBRA;
+                s.y += dy / distancia * VELOCIDAD_SOMBRA;
+            }
+            // Deriva leve: nunca caminan en una línea perfecta.
+            s.fase += 0.05;
+            s.x += Math.cos(s.fase * 1.7) * 0.06;
+            s.y += Math.sin(s.fase * 1.3) * 0.04;
+            s.x = Math.max(12, Math.min(ANCHO - 12, s.x));
+            s.y = Math.max(pisoMinimo() - 4, Math.min(PISO_MAXIMO, s.y));
+
+            if (esperaGolpe <= 0 && distancia < DISTANCIA_GOLPE) {
+                esperaGolpe = ESPERA_GOLPE;
+                golpeFlash = 1;
+                golpes++;
+                juego.golpeSombra();
+                // Retrocede tras el susto: no te atrapa, te desgasta.
+                double empuje = Math.max(1, distancia);
+                s.x -= dx / empuje * 24;
+                s.y -= dy / empuje * 24;
+            }
+        }
+    }
+
+    /** Tres sombras lejos del jugador para que el apagón se sienta poblado, no injusto. */
+    private void sembrarSombras() {
+        sombras.clear();
+        for (int i = 0; i < SOMBRAS_APAGON; i++) {
+            Sombra s = new Sombra();
+            int intentos = 0;
+            do {
+                s.x = 36 + azar.nextDouble() * (ANCHO - 72);
+                s.y = pisoMinimo() + azar.nextDouble() * (PISO_MAXIMO - pisoMinimo());
+                intentos++;
+            } while (Math.hypot(s.x - x, s.y - y) < 38 && intentos < 24);
+            s.fase = azar.nextDouble() * Math.PI * 2;
+            sombras.add(s);
+        }
+        esperaGolpe = 60; // margen para reaccionar al primer parpadeo
+    }
+
+    private static final class Sombra {
+        double x;
+        double y;
+        double fase;
     }
 
     public Zona zonaCercana() {
@@ -313,6 +428,7 @@ public class EscenaBuffet {
         ubicarEntrada(destino, origen);
         fundido = 1;
         espera = 30;
+        reiniciarSombras();
         alCambiarSala.accept(destino);
     }
 
@@ -424,10 +540,18 @@ public class EscenaBuffet {
         }
 
         dibujarParticulas(g);
+        dibujarSombras(g, false);
         dibujarJugador(g);
+        dibujarSombras(g, true);
         pintarLuz(g);
+        dibujarOjosSombras(g);
         dibujarMarcadores(g);
         pintarCordura(g);
+
+        if (golpeFlash > 0) {
+            g.setColor(new Color(122, 12, 16, (int) Math.round(golpeFlash * 76)));
+            g.fillRect(0, 0, ANCHO, ALTO);
+        }
 
         if (fundido > 0) {
             g.setColor(new Color(0, 0, 0, (int) Math.round(fundido * 255)));
@@ -1227,6 +1351,52 @@ public class EscenaBuffet {
 
     // ------------------------------------------------------------------ personajes
 
+    /**
+     * Siluetas del apagón. Se dibujan antes de la máscara de luz; su propio halo y sus ojos
+     * las separan del negro para que el jugador pueda esquivarlas.
+     */
+    private void dibujarSombras(Graphics2D g, boolean delante) {
+        for (Sombra s : sombras) {
+            // Las que están más abajo pisan al jugador; las de arriba quedan detrás.
+            if ((s.y > y) != delante) {
+                continue;
+            }
+            int sx = (int) Math.round(s.x);
+            int sy = (int) Math.round(s.y);
+
+            // aura apenas visible sobre el negro del apagón
+            Pixel.elipse(g, sx - 13, sy - 34, 27, 36, new Color(38, 24, 58, 44));
+            Pixel.elipse(g, sx - 9, sy - 30, 19, 31, new Color(22, 14, 36, 90));
+
+            // silueta: cabeza redonda y cuerpo que se deshilacha
+            Pixel.elipse(g, sx - 6, sy - 29, 13, 13, new Color(6, 5, 10, 244));
+            r(g, sx - 5, sy - 20, 11, 14, new Color(6, 5, 10, 240));
+            r(g, sx - 6, sy - 16, 2, 9, new Color(6, 5, 10, 220));
+            r(g, sx + 5, sy - 15, 2, 8, new Color(6, 5, 10, 220));
+            for (int i = 0; i < 3; i++) {
+                int ondula = (int) Math.round(Math.sin(tick * 0.09 + s.fase + i) * 2);
+                r(g, sx - 4 + i * 3 + ondula, sy - 7, 2, 7 - i, new Color(6, 5, 10, 200));
+            }
+            // borde violáceo tenue
+            r(g, sx - 6, sy - 27, 1, 9, new Color(64, 40, 92, 90));
+            r(g, sx + 5, sy - 28, 1, 10, new Color(64, 40, 92, 90));
+        }
+    }
+
+    /** Los ojos van después de la máscara: son lo único que atraviesa la oscuridad. */
+    private void dibujarOjosSombras(Graphics2D g) {
+        for (Sombra s : sombras) {
+            int sx = (int) Math.round(s.x);
+            int sy = (int) Math.round(s.y);
+            int brillo = 175 + (int) (Math.sin(tick * 0.14 + s.fase) * 45);
+            g.setColor(new Color(150, 255, 205, 28));
+            g.fillRect(sx - 6, sy - 28, 13, 7);
+            g.setColor(new Color(brillo, 255, 208, 230));
+            g.fillRect(sx - 4, sy - 25, 2, 2);
+            g.fillRect(sx + 2, sy - 25, 2, 2);
+        }
+    }
+
     private void dibujarJugador(Graphics2D g) {
         int px = (int) Math.round(x);
         int py = (int) Math.round(y);
@@ -1415,7 +1585,13 @@ public class EscenaBuffet {
         int cordura = Math.max(0, Math.min(100, juego.getJugador().getCordura()));
         boolean apagon = juego.hayTareaPendiente(Lugar.TABLERO);
         float ambiente = apagon ? 0.035f : 0.60f - (100 - cordura) * 0.0024f;
-        List<Foco> focos = apagon ? focosApagon() : focosDeSala();
+        List<Foco> focos = new ArrayList<>(apagon ? focosApagon() : focosDeSala());
+        if (apagon) {
+            // Cada sombra arrastra su propia penumbra: se ven venir, pero siguen siendo negro.
+            for (Sombra s : sombras) {
+                focos.add(new Foco((int) Math.round(s.x), (int) Math.round(s.y) - 12, 30, 0.34f, true));
+            }
+        }
         float pulso = (float) (0.88 + Math.sin(tick * 0.08) * 0.08);
         boolean linterna = juego.tieneLinterna();
         float haloRadio2 = apagon ? (linterna ? 8100f : 3600f) : 2200f;
