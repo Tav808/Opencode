@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.function.Consumer;
 
 /**
  * El buffet dibujado en pixel art sobre un lienzo interno de 384x240. Se encarga del movimiento,
@@ -77,11 +76,12 @@ public class EscenaBuffet {
         ZONAS.put(Sala.BANO, List.of(
                 new Zona("tarea:BANO", "Trapear el baño", Sala.BANO, new Rectangle(126, 130, 130, 76))));
 
+        // Cada estación es la única salida del pedido que le corresponde: primero se repara
+        // si está rota y después se retira la bandeja directamente de ella.
         ZONAS.put(Sala.COCINA, List.of(
-                new Zona("preparar", "Preparar el pedido", Sala.COCINA, new Rectangle(226, 60, 96, 60)),
-                new Zona("tarea:PLANCHA", "Limpiar la plancha", Sala.COCINA, new Rectangle(24, 98, 90, 38)),
-                new Zona("tarea:CAFETERA", "Revisar la cafetera", Sala.COCINA, new Rectangle(142, 64, 58, 38)),
-                new Zona("tarea:HELADERA", "Ordenar la heladera", Sala.COCINA, new Rectangle(324, 58, 52, 90))));
+                new Zona("estacion:PLANCHA", "Plancha", Sala.COCINA, new Rectangle(24, 98, 90, 38)),
+                new Zona("estacion:CAFETERA", "Cafetera", Sala.COCINA, new Rectangle(142, 64, 58, 38)),
+                new Zona("estacion:HELADERA", "Heladera", Sala.COCINA, new Rectangle(324, 58, 52, 90))));
 
         ZONAS.put(Sala.ALMACEN, List.of(
                 new Zona("herramienta:BANO", "Agarrar el trapeador", Sala.ALMACEN, new Rectangle(30, 50, 58, 50)),
@@ -140,7 +140,6 @@ public class EscenaBuffet {
     private int esperaGolpe;
     private double golpeFlash;
     private int golpes;
-    private Consumer<Sala> alCambiarSala = s -> { };
     private BufferedImage mascaraLuz;
     private int[] pixelesLuz;
 
@@ -154,10 +153,6 @@ public class EscenaBuffet {
     }
 
     // ------------------------------------------------------------------ API
-
-    public void setAlCambiarSala(Consumer<Sala> alCambiarSala) {
-        this.alCambiarSala = alCambiarSala;
-    }
 
     public Sala getSala() {
         return sala;
@@ -356,20 +351,54 @@ public class EscenaBuffet {
         double fase;
     }
 
+    /**
+     * La zona accionable más cercana. Una estación solo aparece si está rota o si de ahí
+     * sale el pedido actual; las tareas, solo mientras siguen pendientes.
+     */
     public Zona zonaCercana() {
         List<Zona> zonas = ZONAS.get(sala);
         if (zonas == null) {
             return null;
         }
+        Zona cercana = null;
+        double mejor = Double.MAX_VALUE;
         for (Zona z : zonas) {
+            if (!zonaActiva(z)) {
+                continue;
+            }
             Rectangle r = z.area();
             double cx = Math.max(r.x, Math.min(x, r.x + r.width));
             double cy = Math.max(r.y, Math.min(y, r.y + r.height));
-            if (Math.hypot(x - cx, y - cy) <= DISTANCIA) {
-                return z;
+            double distancia = Math.hypot(x - cx, y - cy);
+            if (distancia <= DISTANCIA && distancia < mejor) {
+                mejor = distancia;
+                cercana = z;
             }
         }
-        return null;
+        return cercana;
+    }
+
+    private boolean zonaActiva(Zona z) {
+        String id = z.id();
+        if (id.equals("cliente")) {
+            Cliente c = juego.clienteActual();
+            return c != null && (!c.isPedidoTomado() || juego.tieneBandejaPara(c));
+        }
+        if (id.startsWith("estacion:")) {
+            Lugar estacion = Lugar.valueOf(id.substring("estacion:".length()));
+            if (juego.hayTareaPendiente(estacion)) {
+                return true;
+            }
+            Cliente c = juego.clienteActual();
+            return c != null && c.isPedidoTomado()
+                    && JuegoService.estacionPara(c) == estacion
+                    && !juego.tieneBandejaPara(c)
+                    && juego.getEnMano() == null;
+        }
+        if (id.startsWith("tarea:")) {
+            return juego.hayTareaPendiente(Lugar.valueOf(id.substring("tarea:".length())));
+        }
+        return true;
     }
 
     /** Evita que el jugador se meta dentro de un mueble. El punto de apoyo son los pies. */
@@ -429,7 +458,6 @@ public class EscenaBuffet {
         fundido = 1;
         espera = 30;
         reiniciarSombras();
-        alCambiarSala.accept(destino);
     }
 
     private void ubicarEntrada(Sala destino, Sala origen) {

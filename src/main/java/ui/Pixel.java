@@ -2,16 +2,18 @@ package ui;
 
 import java.awt.*;
 import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Utilidades de dibujo para la pantalla de juego: fuentes, paneles, barras y texto.
  *
- * El escenario se sigue dibujando en pixel art sobre el lienzo de 384x240, pero la interfaz
- * ya no se hornea ahí: se dibuja directamente sobre la ventana, con la misma escala entera
- * del escenario. Así cada letra se rasteriza a la resolución real de la pantalla (por ejemplo
- * 9 px de diseño por 4 de escala = 36 px reales) y se lee nitidísima, sin agrandar el texto.
+ * Todo el juego conserva el pixel art. La interfaz se dibuja directamente sobre la ventana,
+ * con la misma escala entera del escenario: un texto de 9 px de diseño ocupa 36 px reales
+ * con escala 4 y cada bloque del glifo mide 4x4 px. Así las letras siguen siendo de pixel
+ * art, pero se leen a la resolución real de la pantalla y nunca se deforman.
  */
 public final class Pixel {
 
@@ -38,11 +40,24 @@ public final class Pixel {
     public static final Color VERDE_OSCURO = new Color(0x3F6B52);
     public static final Color AZUL = new Color(0x6D8FA8);
 
-    // Una sola familia del sistema para toda la interfaz: formas reales de cada letra y
-    // acentos correctos. El escenario conserva su pixel art, el texto deja de serlo.
-    private static final Font BASE = new Font(Font.SANS_SERIF, Font.PLAIN, 10);
+    // Una sola familia de pixel art para toda la interfaz. Silkscreen trae las formas
+    // cuadradas del buffet y los acentos del español; si faltara el recurso, se usa una
+    // monoespaciada del sistema para no romper la partida.
+    private static final Font BASE = cargarFuente("Silkscreen-Regular.ttf");
+    private static final Font BASE_NEGRITA = cargarFuente("Silkscreen-Bold.ttf");
 
     private Pixel() { }
+
+    private static Font cargarFuente(String archivo) {
+        try (InputStream entrada = Pixel.class.getResourceAsStream("/fonts/" + archivo)) {
+            if (entrada != null) {
+                return Font.createFont(Font.TRUETYPE_FONT, entrada);
+            }
+        } catch (FontFormatException | IOException e) {
+            // Sin el recurso se sigue jugando: la familia de respaldo mantiene el tamaño.
+        }
+        return new Font(Font.MONOSPACED, Font.PLAIN, 10);
+    }
 
     /** Deja el contexto listo para pixel art: sin suavizado y con interpolación dura. */
     public static void preparar(Graphics2D g) {
@@ -54,23 +69,23 @@ public final class Pixel {
     }
 
     /**
-     * Contexto de interfaz: los rectángulos siguen siendo nítidos, pero el texto se suaviza
-     * y se rasteriza a la escala real de la ventana. Es lo que hace legible cada letra.
+     * Contexto de interfaz: se mantiene el pixel art también en las letras. La escala entera
+     * del contexto convierte cada píxel de diseño en un bloque nítido de la ventana.
      */
     public static void prepararInterfaz(Graphics2D g) {
         preparar(g);
-        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+        g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_OFF);
+        g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_OFF);
     }
 
-    /** Fuente de cuerpo: misma altura aparente que antes, pero con letras reales. */
+    /** Fuente de cuerpo, siempre en la familia de pixel art. */
     public static Font fuenteTexto(int tam) {
         return BASE.deriveFont((float) tam);
     }
 
-    /** Fuente de títulos y carteles, con negrita opcional. */
+    /** Fuente de títulos y carteles, con la variante negrita del mismo pixel art. */
     public static Font fuenteDisplay(int tam, boolean negrita) {
-        return BASE.deriveFont(negrita ? Font.BOLD : Font.PLAIN, (float) tam);
+        return (negrita ? BASE_NEGRITA : BASE).deriveFont((float) tam);
     }
 
     /** Elige automáticamente la familia según el tamaño. */
@@ -190,6 +205,18 @@ public final class Pixel {
 
     public static int altoLinea(int tam) {
         return tam + (tam >= T_SUBTITULO ? 4 : 2);
+    }
+
+    /**
+     * Baja el tamaño letra por letra hasta que el texto entre en el ancho disponible.
+     * Así cada cartel conserva el tamaño más grande que le permite su recuadro.
+     */
+    public static int tamAjustado(Graphics2D g, String texto, int maxAncho, int tam, int minimo) {
+        int ajustado = tam;
+        while (ajustado > minimo && ancho(g, texto, ajustado, false) > maxAncho) {
+            ajustado--;
+        }
+        return ajustado;
     }
 
     /** Corta una línea con puntos suspensivos si no entra en el ancho dado. */
@@ -360,8 +387,9 @@ public final class Pixel {
             g.fillRect(x, y, 2, h);
             g.fillRect(x, y, w, 1);
         }
-        String corta = recortar(g, etiqueta, w - 8, T_CUERPO, false);
-        textoCentrado(g, corta, x + w / 2, y + (h + T_CUERPO) / 2 - 1, T_CUERPO,
+        int tam = tamAjustado(g, etiqueta, w - 8, T_CUERPO, T_CHICO);
+        String corta = recortar(g, etiqueta, w - 8, tam, false);
+        textoCentrado(g, corta, x + w / 2, y + (h + tam) / 2 - 1, tam,
                 elegido ? CREMA : GRIS);
     }
 

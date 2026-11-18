@@ -282,7 +282,7 @@ public class JuegoService {
                 return "La " + nombreEstacion(estacion) + " no anda. Buscá "
                         + herramientaPara(estacion).getNombre() + " en el almacén.";
             }
-            return "Prepará " + c.getPedido() + " en la " + nombreEstacion(estacion) + ".";
+            return "Retirá " + c.getPedido() + " de la " + nombreEstacion(estacion) + ".";
         }
         Tarea t = tareaMasUrgente();
         if (t != null) {
@@ -317,10 +317,27 @@ public class JuegoService {
                 + ". Anotado. Andá a la cocina y prepará la bandeja.";
     }
 
-    /** Segundo paso: armar la bandeja en la cocina. */
-    public String prepararPedido() throws InteraccionInvalidaException {
+    /**
+     * Interacción con una estación de cocina. Si está rota, se repara con su herramienta;
+     * si está limpia, el pedido se retira directamente de ahí, sin pasar por otra barra.
+     */
+    public String interactuarEstacion(Lugar estacion)
+            throws InteraccionInvalidaException, TareaNoDisponibleException {
+        if (estacion.getSala() != sala) {
+            throw new InteraccionInvalidaException("Esa estación no está en esta sala.");
+        }
+        // Si la estación todavía esperaba su turno en la cola, se revela al interactuar.
+        activarTareaDeEstacion(estacion);
+        if (tareaPendienteEn(estacion) != null) {
+            return usarHerramientaEnTarea(estacion);
+        }
+        return prepararEnEstacion(estacion);
+    }
+
+    /** Segundo paso: retirar la bandeja de la estación que corresponde al pedido. */
+    public String prepararEnEstacion(Lugar estacion) throws InteraccionInvalidaException {
         if (sala != Sala.COCINA) {
-            throw new InteraccionInvalidaException("Las bandejas se preparan en la cocina.");
+            throw new InteraccionInvalidaException("Las bandejas se retiran en la cocina.");
         }
         Cliente c = clienteActual();
         if (c == null) {
@@ -329,33 +346,29 @@ public class JuegoService {
         if (!c.isPedidoTomado()) {
             throw new InteraccionInvalidaException("Todavía no le tomaste el pedido " + aQuien(c) + ".");
         }
-
-        // Cada pedido sale de una estación concreta de la cocina. Si está rota o sucia,
-        // primero hay que arreglarla con su herramienta; recién después se arma la bandeja.
-        Lugar estacion = estacionPara(c);
+        if (estacionPara(c) != estacion) {
+            throw new InteraccionInvalidaException("Ese pedido no sale de la " + nombreEstacion(estacion)
+                    + ": va a la " + nombreEstacion(estacionPara(c)) + ".");
+        }
         if (esBandejaPara(enMano, c)) {
             return "Ya tenés la bandeja con " + c.getPedido() + ". Llevala al mostrador.";
         }
-        if (enMano != null && !(enMano instanceof Herramienta herramienta && herramienta.sirvePara(estacion))) {
+        if (enMano != null) {
             throw new InteraccionInvalidaException("Tenés las manos ocupadas con " + enMano.getNombre()
-                    + ". Soltá eso con Q antes de preparar.");
+                    + ". Soltá eso con Q antes de retirar la bandeja.");
         }
+        // Si la estación todavía no se rompió a la vista, se adelanta su tarea: primero
+        // se repara y recién después se puede retirar el pedido.
         activarTareaDeEstacion(estacion);
         Tarea pendiente = tareaPendienteEn(estacion);
         if (pendiente != null) {
-            // La herramienta se queda en la mano: todavía hay que usarla en la estación.
-            throw new InteraccionInvalidaException("No podés cocinar así: " + pendiente.getTitulo()
-                    + ". Arreglá la " + nombreEstacion(estacion) + " con "
+            throw new InteraccionInvalidaException("La " + nombreEstacion(estacion) + " está rota: "
+                    + pendiente.getTitulo() + ". Reparala con "
                     + herramientaPara(estacion).getNombre() + ".");
-        }
-        if (enMano != null) {
-            // La herramienta de la estación ya cumplió: la guardo y armo la bandeja.
-            inventario.agregar(enMano);
-            enMano = null;
         }
         drenaje();
         enMano = new Objeto(1000 + c.getId(), "una bandeja con " + c.getPedido(), "PEDIDO", false, 0, null);
-        return "Preparaste una bandeja con " + c.getPedido() + " en la " + nombreEstacion(estacion)
+        return "Retiraste una bandeja con " + c.getPedido() + " de la " + nombreEstacion(estacion)
                 + ". No la dejes enfriar.";
     }
 
@@ -451,8 +464,8 @@ public class JuegoService {
     // ---------------------------------------------------------------- tareas
 
     /**
-     * Intenta hacer la tarea pendiente de un lugar. La herramienta se lleva puesta:
-     * no se gasta, pero tiene que ser la que corresponde.
+     * Intenta hacer la tarea pendiente de un lugar. La herramienta tiene que ser la que
+     * corresponde y se consume al usarla: si hace falta de nuevo, se busca en el almacén.
      */
     public String usarHerramientaEnTarea(Lugar lugar) throws TareaNoDisponibleException {
         if (lugar.getSala() != sala) {
@@ -482,6 +495,12 @@ public class JuegoService {
         sumarCordura(recuperacion);
 
         String mensaje = tarea.getMensajeExito();
+        if (requerida != null) {
+            // La herramienta se gastó en la tarea: desaparece de la mano y de la mochila.
+            // Para la próxima hay que volver al estante del almacén a buscarla.
+            enMano = null;
+            inventario.getObjetos().removeIf(o -> o instanceof Herramienta h && h.sirvePara(lugar));
+        }
         Objeto premio = tarea.getRecompensa();
         if (premio != null) {
             inventario.agregar(premio);
@@ -737,10 +756,13 @@ public class JuegoService {
         if (dia == 1 && !hayTareaPendiente(Lugar.TABLERO)) {
             nuevas.add(crearTarea(Lugar.TABLERO, dia, siguienteNumero(dia, nuevas)));
         }
-        // La cocina siempre arranca con las tres estaciones en problemas: preparar un
-        // pedido obliga a limpiar la estación que le toca antes de armar la bandeja.
-        // La plancha va primero porque es la que más pedidos usa.
-        for (Lugar estacion : List.of(Lugar.PLANCHA, Lugar.CAFETERA, Lugar.HELADERA)) {
+        // No todas las noches se rompe la cocina entera: cada día se eligen al azar una,
+        // dos o tres estaciones. Las que ya venían rotas de la noche anterior se respetan.
+        List<Lugar> estaciones = new ArrayList<>(List.of(Lugar.PLANCHA, Lugar.CAFETERA, Lugar.HELADERA));
+        Collections.shuffle(estaciones, azar);
+        int estacionesRotas = 1 + azar.nextInt(3);
+        for (int i = 0; i < estacionesRotas; i++) {
+            Lugar estacion = estaciones.get(i);
             boolean yaExiste = tareas.stream().anyMatch(t -> t.getLugar() == estacion)
                     || nuevas.stream().anyMatch(t -> t.getLugar() == estacion);
             if (!yaExiste) {

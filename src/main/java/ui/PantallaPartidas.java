@@ -369,10 +369,10 @@ public class PantallaPartidas extends JPanel {
     private void dibujarLista(Graphics2D g) {
         Pixel.panel(g, LISTA.x, LISTA.y, LISTA.width, LISTA.height,
                 new Color(0x0B1210), Pixel.BORDE);
-        Pixel.texto(g, "PARTIDAS GUARDADAS", 22, 66, Pixel.T_CUERPO, Pixel.MOSTAZA, true);
+        Pixel.texto(g, "PARTIDAS", 22, 66, Pixel.T_CUERPO, Pixel.MOSTAZA, true);
         Pixel.textoDerecha(g, tablaPartidas.getRowCount()
                         + (tablaPartidas.getRowCount() == 1 ? " guardada" : " guardadas"),
-                362, 66, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
+                240, 66, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
         g.setColor(Pixel.BORDE);
         g.fillRect(20, 70, 224, 1);
 
@@ -578,8 +578,10 @@ public class PantallaPartidas extends JPanel {
                     BTN_BORRAR_NO.width + 1, BTN_BORRAR_NO.height + 1);
         }
 
+        int tamAyuda = Pixel.tamAjustado(g, "ENTER confirmar  ·  ESC cancelar  ·  ← → elegir",
+                224, Pixel.T_CHICO, Pixel.T_CHICO - 2);
         Pixel.textoCentrado(g, "ENTER confirmar  ·  ESC cancelar  ·  ← → elegir",
-                ANCHO / 2, 178, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
+                ANCHO / 2, 178, tamAyuda, Pixel.GRIS_OSCURO);
     }
 
     // ------------------------------------------------------------------ teclado
