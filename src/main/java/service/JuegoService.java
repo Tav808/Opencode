@@ -23,9 +23,9 @@ import java.util.Random;
  * Reglas del juego. La interfaz solo dibuja y llama a estos métodos: acá viven los pedidos,
  * las herramientas, las salas, la cordura y el paso de los días.
  *
- * El turno tiene tres pasos por cliente: tomar el pedido en el mostrador, preparar la bandeja
- * en la cocina y llevársela. Las tareas, en cambio, piden una herramienta concreta que hay
- * que buscar en el almacén.
+ * El turno tiene tres pasos por cliente: tomar el pedido en el mostrador, retirar la bandeja
+ * de la estación de cocina que le toca y llevársela. Las tareas, en cambio, piden una
+ * herramienta concreta que hay que buscar en el almacén.
  */
 public class JuegoService {
 
@@ -38,7 +38,7 @@ public class JuegoService {
     /** Con la cordura en este piso o menos, cualquier trabajo pendiente vuelve la presión crítica. */
     public static final int CORDURA_PRESION_CRITICA = 35;
     /** Cuando una sombra te alcanza en el apagón. */
-    public static final int DANO_SOMBRA = 10;
+    public static final int DANO_SOMBRA = 15;
 
     private static final int MAX_CLIENTES = 12;
     private static final int MAX_TAREAS = 7;
@@ -169,7 +169,7 @@ public class JuegoService {
         if (nivel <= 0) {
             return 0;
         }
-        int dano = nivel >= 4 ? 2 : 1;
+        int dano = nivel >= 4 ? 4 : 2;
         restarCordura(dano);
         return dano;
     }
@@ -272,7 +272,7 @@ public class JuegoService {
             Tarea enEstacion = tareaPendienteEn(estacion);
             if (enEstacion != null) {
                 if (tieneHerramientaPara(estacion)) {
-                    return "La " + nombreEstacion(estacion) + " está trabada: arreglala ahora que tenés "
+                    return "La " + nombreEstacion(estacion) + " está rota: arreglala ahora que tenés "
                             + herramientaPara(estacion).getNombre() + ".";
                 }
                 if (tieneHerramientaGuardada(estacion)) {
@@ -309,12 +309,12 @@ public class JuegoService {
         }
         if (c.isPedidoTomado()) {
             throw new InteraccionInvalidaException("Ya le tomaste el pedido " + aQuien(c)
-                    + ". Ahora hay que prepararlo.");
+                    + ". Ahora retirá la bandeja en la cocina.");
         }
         drenaje();
         c.marcarPedidoTomado();
         return c.getNombre() + " pide " + c.getPedido()
-                + ". Anotado. Andá a la cocina y prepará la bandeja.";
+                + ". Anotado. Retirá la bandeja de " + nombreEstacion(estacionPara(c)) + ".";
     }
 
     /**
@@ -347,8 +347,8 @@ public class JuegoService {
             throw new InteraccionInvalidaException("Todavía no le tomaste el pedido " + aQuien(c) + ".");
         }
         if (estacionPara(c) != estacion) {
-            throw new InteraccionInvalidaException("Ese pedido no sale de la " + nombreEstacion(estacion)
-                    + ": va a la " + nombreEstacion(estacionPara(c)) + ".");
+            throw new InteraccionInvalidaException("Ese pedido no se retira de " + nombreEstacion(estacion)
+                    + ": corresponde a " + nombreEstacion(estacionPara(c)) + ".");
         }
         if (esBandejaPara(enMano, c)) {
             return "Ya tenés la bandeja con " + c.getPedido() + ". Llevala al mostrador.";
@@ -362,9 +362,9 @@ public class JuegoService {
         activarTareaDeEstacion(estacion);
         Tarea pendiente = tareaPendienteEn(estacion);
         if (pendiente != null) {
-            throw new InteraccionInvalidaException("La " + nombreEstacion(estacion) + " está rota: "
-                    + pendiente.getTitulo() + ". Reparala con "
-                    + herramientaPara(estacion).getNombre() + ".");
+            throw new InteraccionInvalidaException(pendiente.getTitulo()
+                    + ". Usá " + herramientaPara(estacion).getNombre()
+                    + " para arreglarla y volvé a intentar.");
         }
         drenaje();
         enMano = new Objeto(1000 + c.getId(), "una bandeja con " + c.getPedido(), "PEDIDO", false, 0, null);
@@ -430,7 +430,7 @@ public class JuegoService {
         }
         if (!esBandejaPara(enMano, c)) {
             throw new PedidoInvalidoException("Necesitás la bandeja con " + c.getPedido()
-                    + ". Preparala en la cocina.");
+                    + ". Retirala de " + nombreEstacion(estacionPara(c)) + ".");
         }
         drenaje();
         c.marcarAtendido();
@@ -439,8 +439,7 @@ public class JuegoService {
         String mensaje = "Le entregaste " + c.getPedido() + " " + aQuien(c) + " y se fue conforme. +6 de cordura.";
         Tarea nueva = activarSiguienteTarea();
         if (nueva != null) {
-            mensaje += " Algo más para atender: " + nueva.getTitulo() + " en "
-                    + nueva.getLugar().getEtiqueta() + ".";
+            mensaje += " Algo más para atender: " + nueva.getDescripcion() + ".";
         }
         return mensaje;
     }
@@ -478,13 +477,13 @@ public class JuegoService {
         Herramienta requerida = tarea.getHerramienta();
         if (requerida != null) {
             if (!(enMano instanceof Herramienta)) {
-                throw new TareaNoDisponibleException("Para " + tarea.getTitulo() + " necesitás "
-                        + requerida.getNombre() + ". Está en el almacén.");
+                throw new TareaNoDisponibleException("Necesitás " + requerida.getNombre()
+                        + " para arreglar " + lugar.getEtiqueta() + ". Está en el almacén.");
             }
             Herramienta enManoHerramienta = (Herramienta) enMano;
             if (!enManoHerramienta.sirvePara(lugar)) {
-                throw new TareaNoDisponibleException("Eso no sirve acá. Necesitás "
-                        + requerida.getNombre() + " para " + lugar.getEtiqueta() + ".");
+                throw new TareaNoDisponibleException("Esa herramienta no sirve para "
+                        + lugar.getEtiqueta() + ". Necesitás " + requerida.getNombre() + ".");
             }
         }
 
@@ -529,7 +528,7 @@ public class JuegoService {
         }
         if (enMano != null) {
             throw new InteraccionInvalidaException("Tenés las manos ocupadas con " + enMano.getNombre()
-                    + ". Soltala con Q antes de agarrar una herramienta.");
+                    + ". Soltá eso con Q antes de agarrar una herramienta.");
         }
         drenaje();
         enMano = nueva;
@@ -565,13 +564,14 @@ public class JuegoService {
         }
         Tarea urgente = tareaMasUrgente();
         StringBuilder mensaje = new StringBuilder();
-        mensaje.append(conserje.getNombre()).append(" (").append(conserje.getRol()).append("): \"")
-                .append(conserje.getDialogo()).append("\"");
+        mensaje.append("\"").append(conserje.getDialogo()).append("\"");
         if (conserje.isPuedeDarTarea() && urgente != null) {
-            mensaje.append(" Lo más urgente: ").append(urgente.getTitulo())
-                    .append(" en ").append(urgente.getLugar().getEtiqueta()).append(".");
+            mensaje.append(" Lo más urgente: ").append(urgente.getDescripcion())
+                    .append(". Está en ").append(urgente.getLugar().getEtiqueta()).append(".");
         } else if (conserje.isPuedeDarTarea()) {
-            mensaje.append(" No queda nada pendiente. Cerrá la caja y andá a dormir.");
+            mensaje.append(turnoTerminado()
+                    ? " No queda nada pendiente. Cerrá la caja y andá a dormir."
+                    : " No queda ninguna tarea pendiente. Terminá los pedidos que faltan.");
         }
         if (!conserjeHablado) {
             conserjeHablado = true;
@@ -614,8 +614,8 @@ public class JuegoService {
             inventario.agregar(soltado);
             return "Guardaste " + soltado.getNombre() + " en la mochila.";
         }
-        restarCordura(2);
-        return "Tiraste " + soltado.getNombre() + " a la basura. -2 de cordura.";
+        restarCordura(4);
+        return "Tiraste " + soltado.getNombre() + " a la basura. -4 de cordura.";
     }
 
     /**
@@ -662,7 +662,7 @@ public class JuegoService {
                         .filter(o -> o instanceof Herramienta)
                         .findFirst().orElse(null));
         if (elegido == null) {
-            throw new ObjetoNoDisponibleException("No tenés nada usable en la mochila.");
+            throw new ObjetoNoDisponibleException("No tenés ningún objeto que puedas usar en la mochila.");
         }
         return usarObjeto(elegido);
     }
@@ -715,7 +715,7 @@ public class JuegoService {
 
     /** Cada interacción desgasta un poco. Con el tablero roto, el doble. */
     private void drenaje() {
-        restarCordura(hayTareaPendiente(Lugar.TABLERO) ? 2 : 1);
+        restarCordura(hayTareaPendiente(Lugar.TABLERO) ? 4 : 2);
     }
 
     private void sumarCordura(int cantidad) {
@@ -823,7 +823,7 @@ public class JuegoService {
                 return new Tarea(id, "la bolsa de basura está por explotar y hay moscas por todos lados", dia, false, lugar,
                         "La basura vive",
                         "Barriste la basura al patio. No mires hacia atrás.",
-                        new Objeto(703, "una nota arrugada", "NOTA", true, -6,
+                        new Objeto(703, "una nota arrugada", "NOTA", true, -10,
                                 "Dice: \"NO LE DES NADA AL ÚLTIMO CLIENTE\". La letra es tuya."),
                         herramienta, 2, "Las moscas llenan el comedor y no te dejan pensar.");
             case TABLERO:
