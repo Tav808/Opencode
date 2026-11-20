@@ -93,7 +93,8 @@ Todo el juego —el menú de partidas, el buffet, el HUD, los diálogos, el cuad
 
 - **Menú de partidas pixel art con JTable real:** la lista es un `JTable` con `DefaultTableModel` que carga las partidas persistidas al abrir y se refresca después de cada alta, modificación o baja. La tabla se pinta dentro del lienzo junto con la ficha del jugador, los botones de jugar/nueva/editar/borrar y el formulario de alta o edición.
 - **Intro de cinco pasos:** cartel de "BUFFET TERROR" que parpadea, tres noches con texto a máquina y una última pantalla con los controles. Se avanza con `ENTER` y se sale con `ESC`.
-- **HUD dentro del lienzo:** día y sala, pedidos y tareas, barra de cordura, objeto en mano, objetivo del turno y las dos últimas entradas de la bitácora. El cartel de interacción aparece sobre la cabeza del personaje.
+- **HUD dentro del lienzo:** dos franjas arriba (día, sala, pedidos, tareas y objetivo a la izquierda; cordura y presión a la derecha) y la barra de aguante abajo a la izquierda. El cartel de interacción aparece sobre la cabeza del personaje.
+- **Carrera con `SHIFT`:** mantené `SHIFT` mientras te movés para correr. La barra de **STAMINA** se vacía al correr, tarda un instante en empezar a recargarse y se repone sola al caminar o quedarte quieto. Sin aguante volvés a caminar.
 - **Cuaderno (`TAB`):** pedido actual, tareas pendientes con su lugar y herramienta, e inventario navegable con `↑↓` + `ENTER`.
 - **Pausa (`ESC`):** continuar, guardar progreso o salir al menú con confirmación.
 - **Fin de jornada:** resumen de clientes, tareas y cordura, uso de consumibles y confirmación extra si el jugador está por debajo del mínimo de cordura.

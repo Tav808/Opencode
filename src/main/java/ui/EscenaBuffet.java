@@ -32,6 +32,11 @@ public class EscenaBuffet {
     /** Caminando se llega cómodo a cualquier sala; con Shift se cruza el buffet corriendo. */
     private static final double VELOCIDAD = 1.7;
     private static final double VELOCIDAD_CORRER = 2.9;
+    /** La carrera gasta aguante; sin aguante se vuelve a caminar. */
+    private static final double STAMINA_MAXIMA = 100;
+    private static final double GASTE_STAMINA = 0.55;
+    private static final double REGENERACION_STAMINA = 0.30;
+    private static final int ESPERA_STAMINA = 45;
     private static final double DISTANCIA = 28;
     /** Los pies pueden llegar hasta el borde inferior del comedor. */
     private static final int PISO_MAXIMO = ALTO - 3;
@@ -134,6 +139,9 @@ public class EscenaBuffet {
     private double animacion;
     private boolean caminando;
     private boolean corriendo;
+    private double stamina = STAMINA_MAXIMA;
+    private boolean agotado;
+    private int esperaStamina;
     private int tick;
     private double fundido = 1;
     private int espera = 30;
@@ -186,6 +194,9 @@ public class EscenaBuffet {
         ubicarEntrada(sala, null);
         fundido = 1;
         espera = 30;
+        stamina = STAMINA_MAXIMA;
+        agotado = false;
+        esperaStamina = 0;
         reiniciarSombras();
     }
 
@@ -219,7 +230,24 @@ public class EscenaBuffet {
         }
 
         caminando = dx != 0 || dy != 0;
-        corriendo = caminando && (teclas.contains(java.awt.event.KeyEvent.VK_SHIFT));
+        boolean quiereCorrer = caminando && teclas.contains(java.awt.event.KeyEvent.VK_SHIFT);
+        if (!quiereCorrer) {
+            agotado = false;
+        }
+        corriendo = quiereCorrer && !agotado && stamina > 0;
+        if (corriendo) {
+            stamina = Math.max(0, stamina - GASTE_STAMINA);
+            if (stamina <= 0) {
+                // Se quedó sin aguante: vuelve a caminar y espera un momento antes de recuperar.
+                agotado = true;
+                corriendo = false;
+                esperaStamina = ESPERA_STAMINA;
+            }
+        } else if (esperaStamina > 0) {
+            esperaStamina--;
+        } else {
+            stamina = Math.min(STAMINA_MAXIMA, stamina + REGENERACION_STAMINA);
+        }
         if (caminando) {
             double largo = Math.hypot(dx, dy);
             dx /= largo;
@@ -257,6 +285,15 @@ public class EscenaBuffet {
 
     public boolean isCorriendo() {
         return corriendo;
+    }
+
+    /** Aguante restante para correr, de 0 a 100. */
+    public double getStamina() {
+        return stamina;
+    }
+
+    public double getStaminaMaxima() {
+        return STAMINA_MAXIMA;
     }
 
     /** Cantidad acumulada de golpes de sombra, para que el HUD pueda destellar. */

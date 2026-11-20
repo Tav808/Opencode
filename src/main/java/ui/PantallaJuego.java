@@ -492,6 +492,20 @@ public class PantallaJuego extends JPanel implements ActionListener {
             Pixel.panelTenue(g, x, 224, ancho, 13, 214, Pixel.MOSTAZA);
             Pixel.textoCentrado(g, texto, ANCHO / 2, 233, Pixel.T_CHICO, Pixel.MOSTAZA_CLARA);
         }
+
+        dibujarStamina(g);
+    }
+
+    /** Barra de aguante abajo a la izquierda: se vacía mientras corrés y vuelve sola. */
+    private void dibujarStamina(Graphics2D g) {
+        int valor = (int) Math.round(Math.max(0, Math.min(escena.getStaminaMaxima(), escena.getStamina())));
+        int maximo = (int) Math.round(escena.getStaminaMaxima());
+        Color color = valor <= 20 ? Pixel.ROJO_CLARO : valor <= 45 ? Pixel.MOSTAZA : Pixel.VERDE;
+        Pixel.panelTenue(g, 6, 220, 100, 14, 214, valor <= 20 ? Pixel.ROJO : Pixel.BORDE);
+        Pixel.texto(g, "STAMINA", 10, 230, Pixel.T_CHICO, Pixel.GRIS_OSCURO);
+        int xBarra = 10 + Pixel.ancho(g, "STAMINA ", Pixel.T_CHICO);
+        Pixel.barra(g, xBarra, 224, 102 - xBarra, 6, valor, maximo, color,
+                new Color(0x1B2621), Pixel.BORDE);
     }
 
     /** Texto del chip según lo que se pueda hacer ahí en este instante. */
