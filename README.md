@@ -124,13 +124,11 @@ src/main/java
 |
 ├── modelo/        Mundo → Personaje → Jugador, Cliente, NPC; Objeto → Herramienta; Tarea, Lugar, Sala, Inventario.      
 |
-├── interfaces/    Interactuable      
+├── excepciones/   Las 5 excepciones del juego + PersistenciaException (fallas de base de datos)      
 |
-├── excepciones/   Las 5 excepciones del juego + PersistenciaException (fallas de base de datos)
-│
 └── main/          Main: abre la ventana
 
-Flujo: Usuario → UI → Service → DAO → MySQL. Las excepciones viajan del Service a la UI, que las muestra con `JOptionPane` (y además deja el aviso en el HUD), sin cortar la partida.
+Flujo: Usuario → UI → Service → DAO → MySQL. Las excepciones viajan del Service a la UI, que las muestra con `JOptionPane`, sin cortar la partida.
 
 # Flujo de trabajo
 

@@ -50,7 +50,7 @@ public class JuegoService {
     /** Tareas del día que todavía no se mostraron: se activan a medida que entregás pedidos. */
     private final List<Tarea> tareasPendientesDeActivar = new ArrayList<>();
     private final Inventario inventario = new Inventario();
-    private final NPC conserje = new NPC(900, "el conserje", "conserje del turno noche",
+    private final NPC conserje = new NPC(900, "el conserje",
             "Si la luz se va, no corras: el pasillo cambia de lugar.", true);
 
     private Sala sala = Sala.COMEDOR;
@@ -90,10 +90,6 @@ public class JuegoService {
         return inventario.getObjetos();
     }
 
-    public List<Cliente> getClientes() {
-        return Collections.unmodifiableList(clientes);
-    }
-
     public List<Tarea> getTareas() {
         return Collections.unmodifiableList(tareas);
     }
@@ -104,10 +100,6 @@ public class JuegoService {
 
     public String getCausaPerdida() {
         return causaPerdida;
-    }
-
-    public NPC getConserje() {
-        return conserje;
     }
 
     // ---------------------------------------------------------------- presión
@@ -581,11 +573,6 @@ public class JuegoService {
         return mensaje.toString();
     }
 
-    /** El nombre de la herramienta que pide un lugar (aunque no la tengas). */
-    public static String nombreHerramienta(Lugar lugar) {
-        return herramientaPara(lugar).getNombre();
-    }
-
     public static Herramienta herramientaPara(Lugar lugar) {
         String nombre;
         switch (lugar) {
@@ -743,7 +730,7 @@ public class JuegoService {
         Collections.shuffle(perfiles, azar);
         for (int i = 0; i < cantidadClientes; i++) {
             Perfil p = perfiles.get(i % perfiles.size());
-            clientes.add(new Cliente(i + 1, p.nombre(), p.pedido(), p.respuestas()));
+            clientes.add(new Cliente(i + 1, p.nombre(), p.pedido()));
         }
 
         // Las tareas no se borran al dormir: lo que quedó pendiente sigue activo y presiona.
@@ -806,108 +793,76 @@ public class JuegoService {
         Herramienta herramienta = herramientaPara(lugar);
         switch (lugar) {
             case BANO:
-                return new Tarea(id, "el piso del baño vuelve a llenarse de agua", dia, false, lugar,
+                return new Tarea(id, "el piso del baño vuelve a llenarse de agua", lugar,
                         "El baño no se seca",
                         "Trapeaste el piso. El agua vuelve a aparecer detrás tuyo, pero el espejo te deja pasar.",
                         new Objeto(701, "un jabón de hotel", "JABON", true, 5,
                                 "Te lavaste la cara. Por un segundo el espejo te devolvió tu reflejo."),
-                        herramienta, 1, "El piso sigue brillando y te resbalás en cada pasada.");
+                        herramienta, 1);
             case MESAS:
-                return new Tarea(id, "las mesas quedaron pegajosas y con restos de comida", dia, false, lugar,
+                return new Tarea(id, "las mesas quedaron pegajosas y con restos de comida", lugar,
                         "Mesas pegajosas",
                         "Dejaste las mesas relucientes. Debajo de un plato había una propina.",
                         new Objeto(702, "una propina", "MONEDA", true, 6,
                                 "Te compraste un alfajor con la propina. Sabe a plástico."),
-                        herramienta, 2, "Los clientes comen de pie y te miran con fastidio.");
+                        herramienta, 2);
             case BASURA:
-                return new Tarea(id, "la bolsa de basura está por explotar y hay moscas por todos lados", dia, false, lugar,
+                return new Tarea(id, "la bolsa de basura está por explotar y hay moscas por todos lados", lugar,
                         "La basura vive",
                         "Barriste la basura al patio. No mires hacia atrás.",
                         new Objeto(703, "una nota arrugada", "NOTA", true, -10,
                                 "Dice: \"NO LE DES NADA AL ÚLTIMO CLIENTE\". La letra es tuya."),
-                        herramienta, 2, "Las moscas llenan el comedor y no te dejan pensar.");
+                        herramienta, 2);
             case TABLERO:
-                return new Tarea(id, "el tablero de luz chispea y las luces parpadean solas", dia, false, lugar,
+                return new Tarea(id, "el tablero de luz chispea y las luces parpadean solas", lugar,
                         "Cortocircuito",
                         "Cambiaste el fusible. La luz vuelve a ser estable. Había una linterna en el cajón.",
                         new Objeto(704, "una linterna", "HERRAMIENTA", true, 7,
                                 "Alumbra rincones donde antes no te animabas a mirar."),
-                        herramienta, 3, "El buffet queda a oscuras y el miedo crece en cada rincón.");
+                        herramienta, 3);
             case PLANCHA:
-                return new Tarea(id, "la plancha está llena de grasa quemada y larga un humo raro", dia, false, lugar,
+                return new Tarea(id, "la plancha está llena de grasa quemada y larga un humo raro", lugar,
                         "La plancha humea",
                         "Raspaste la plancha hasta que quedó como espejo. Algo brilló en la grasa.",
                         new Objeto(705, "una llave oxidada", "LLAVE", false),
-                        herramienta, 2, "El humo tapa la cocina y te cuesta respirar.");
+                        herramienta, 2);
             case CAFETERA:
-                return new Tarea(id, "la cafetera gotea algo oscuro que no parece café", dia, false, lugar,
+                return new Tarea(id, "la cafetera gotea algo oscuro que no parece café", lugar,
                         "Goteo negro",
                         "Ajustaste la cafetera y salió un café perfecto.",
                         new Objeto(706, "un café recién hecho", "BEBIDA", true, 10,
                                 "Está caliente y por un rato todo parece normal."),
-                        herramienta, 2, "El líquido se mezcla con algo que se mueve solo.");
+                        herramienta, 2);
             case HELADERA:
             default:
-                return new Tarea(id, "la heladera quedó abierta y hay bebidas tiradas por el piso", dia, false, lugar,
+                return new Tarea(id, "la heladera quedó abierta y hay bebidas tiradas por el piso", lugar,
                         "La heladera no cierra",
                         "Acomodaste todo y cerraste la heladera. Se salvó una gaseosa.",
                         new Objeto(707, "una gaseosa fría", "BEBIDA", true, 9, "Qué alivio."),
-                        herramienta, 2, "El frío se escapa y las bebidas ruedan por el piso.");
+                        herramienta, 2);
         }
     }
 
     // ---------------------------------------------------------------- datos fijos
 
-    private record Perfil(String nombre, String pedido, String[] respuestas) { }
+    private record Perfil(String nombre, String pedido) { }
 
     private static final Perfil[] PERFILES = {
-            new Perfil("un cliente", "un café", new String[]{
-                    "Un cliente no contesta y se queda mirándote fijo.",
-                    "Un cliente parpadea una sola vez. Tarda demasiado en volver a abrir los ojos."}),
-            new Perfil("una nena de guardapolvo", "un alfajor", new String[]{
-                    "La nena dice que su mamá la espera afuera. Afuera no hay nadie.",
-                    "La nena susurra: \"Vos también te vas a quedar acá\"."}),
-            new Perfil("el profesor de gimnasia", "una botella de agua", new String[]{
-                    "El profesor dice que hace años que corre y no logra salir del patio.",
-                    "El profesor te muestra el cronómetro: marca la hora de mañana."}),
-            new Perfil("un señor de impermeable", "un tostado de jamón y queso", new String[]{
-                    "El señor gotea sobre el mostrador. Afuera no llueve.",
-                    "El señor dice que ya vino ayer. Y anteayer. Y el año que viene."}),
-            new Perfil("la directora", "un sándwich de milanesa", new String[]{
-                    "La directora te recuerda que el buffet no cierra nunca.",
-                    "La directora anota algo en su libreta. Es tu nombre, repetido cientos de veces."}),
-            new Perfil("la portera", "un té con dos de azúcar", new String[]{
-                    "La portera dice que el piso del baño nunca se seca.",
-                    "La portera te pide que no mires el espejo después de las once."}),
-            new Perfil("un chico con mochila", "una empanada de carne", new String[]{
-                    "El chico dice que su mochila pesa cada vez más.",
-                    "El chico abre la mochila. Adentro hay otra mochila."}),
-            new Perfil("una mujer con velo", "un flan casero", new String[]{
-                    "La mujer no tiene cara, pero igual sonríe.",
-                    "La mujer te pregunta si este es el buffet de la escuela donde ibas."}),
-            new Perfil("el kiosquero", "un vaso de leche", new String[]{
-                    "El kiosquero dice que hace turno doble desde 1998.",
-                    "El kiosquero te cobra con monedas que todavía no existen."}),
-            new Perfil("una señora mayor", "un pan dulce", new String[]{
-                    "La señora dice que el pan dulce era de su hijo.",
-                    "La señora te llama por el nombre de su hijo. Coincide con el tuyo."}),
-            new Perfil("un nene descalzo", "una porción de torta", new String[]{
-                    "El nene mira la torta y no parpadea.",
-                    "El nene pregunta si podés guardarle un pedazo para siempre."}),
-            new Perfil("el auxiliar de turno", "una milanesa con puré", new String[]{
-                    "El auxiliar dice que hoy renunció tres veces.",
-                    "El auxiliar te pide que no apagues la luz del pasillo."}),
-            new Perfil("una alumna repetidora", "un chocolate caliente", new String[]{
-                    "La alumna dice que ya cursó este día antes.",
-                    "La alumna te pregunta qué día es. No sabés qué contestar."}),
-            new Perfil("el último cliente", "lo que sea", new String[]{
-                    "El último cliente no tiene pedido. Solo espera.",
-                    "El último cliente sonríe y dice: \"Esta vez tampoco te vas\"."}),
-            new Perfil("un hombre de traje", "una gaseosa", new String[]{
-                    "El hombre de traje dice que viene a auditar el buffet.",
-                    "El hombre de traje te ofrece un contrato. No tiene letra chica: no tiene letra."}),
-            new Perfil("una gemela", "otra gaseosa", new String[]{
-                    "La gemela dice que su hermana ya vino. Las dos tienen el mismo nombre.",
-                    "La gemela te guiña un ojo. La otra también."})
+            new Perfil("un cliente", "un café"),
+            new Perfil("una nena de guardapolvo", "un alfajor"),
+            new Perfil("el profesor de gimnasia", "una botella de agua"),
+            new Perfil("un señor de impermeable", "un tostado de jamón y queso"),
+            new Perfil("la directora", "un sándwich de milanesa"),
+            new Perfil("la portera", "un té con dos de azúcar"),
+            new Perfil("un chico con mochila", "una empanada de carne"),
+            new Perfil("una mujer con velo", "un flan casero"),
+            new Perfil("el kiosquero", "un vaso de leche"),
+            new Perfil("una señora mayor", "un pan dulce"),
+            new Perfil("un nene descalzo", "una porción de torta"),
+            new Perfil("el auxiliar de turno", "una milanesa con puré"),
+            new Perfil("una alumna repetidora", "un chocolate caliente"),
+            new Perfil("el último cliente", "lo que sea"),
+            new Perfil("un hombre de traje", "una gaseosa"),
+            new Perfil("una gemela", "otra gaseosa")
     };
 }

@@ -24,9 +24,6 @@ public final class Pixel {
     public static final int T_GRANDE = 26;
 
     public static final Color NEGRO = new Color(0x070A09);
-    public static final Color CARBON = new Color(0x111815);
-    public static final Color PANEL = new Color(0x0E1512, true);
-    public static final Color PANEL_OPACO = new Color(0x0E1512);
     public static final Color BORDE = new Color(0x33463E);
     public static final Color BORDE_CLARO = new Color(0x51695C);
     public static final Color CREMA = new Color(0xEDE8D8);
@@ -37,7 +34,6 @@ public final class Pixel {
     public static final Color ROJO = new Color(0xC4513F);
     public static final Color ROJO_CLARO = new Color(0xE07A62);
     public static final Color VERDE = new Color(0x7FB58A);
-    public static final Color VERDE_OSCURO = new Color(0x3F6B52);
     public static final Color AZUL = new Color(0x6D8FA8);
 
     // Una sola familia de pixel art para toda la interfaz. Silkscreen trae las formas
@@ -156,23 +152,6 @@ public final class Pixel {
         texto(g, texto, derechaX - ancho(g, texto, tam, negrita), y, tam, color, negrita);
     }
 
-    public static void textoDerechaDisplay(Graphics2D g, String texto, int derechaX, int y, int tam, Color color,
-                                           boolean negrita) {
-        textoDisplay(g, texto, derechaX - anchoDisplay(g, texto, tam, negrita), y, tam, color, negrita);
-    }
-
-    /** Texto con contorno de un píxel: clave para que se lea sobre el arte. */
-    public static void textoBorde(Graphics2D g, String texto, int x, int y, int tam, Color color, Color borde) {
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dy = -1; dy <= 1; dy++) {
-                if (dx != 0 || dy != 0) {
-                    texto(g, texto, x + dx, y + dy, tam, borde, true);
-                }
-            }
-        }
-        texto(g, texto, x, y, tam, color, true);
-    }
-
     public static int ancho(Graphics2D g, String texto, int tam) {
         return ancho(g, texto, tam, false);
     }
@@ -230,21 +209,6 @@ public final class Pixel {
         String puntos = "...";
         int i = texto.length();
         while (i > 0 && ancho(g, texto.substring(0, i) + puntos, tam, negrita) > maxAncho) {
-            i--;
-        }
-        return texto.substring(0, Math.max(0, i)).stripTrailing() + puntos;
-    }
-
-    public static String recortarDisplay(Graphics2D g, String texto, int maxAncho, int tam, boolean negrita) {
-        if (texto == null) {
-            return "";
-        }
-        if (anchoDisplay(g, texto, tam, negrita) <= maxAncho) {
-            return texto;
-        }
-        String puntos = "...";
-        int i = texto.length();
-        while (i > 0 && anchoDisplay(g, texto.substring(0, i) + puntos, tam, negrita) > maxAncho) {
             i--;
         }
         return texto.substring(0, Math.max(0, i)).stripTrailing() + puntos;
@@ -400,14 +364,6 @@ public final class Pixel {
                 g.setColor((((x + xx) / 2 + (y + yy) / 2) & 1) == 0 ? a : b);
                 g.fillRect(x + xx, y + yy, 2, 2);
             }
-        }
-    }
-
-    /** Líneas horizontales tenues, tipo monitor viejo. */
-    public static void scanlines(Graphics2D g, int ancho, int alto) {
-        g.setColor(new Color(0, 0, 0, 22));
-        for (int y = 0; y < alto; y += 3) {
-            g.fillRect(0, y, ancho, 1);
         }
     }
 
